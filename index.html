@@ -31,7 +31,10 @@
           <button class="chip" data-locale="en" type="button" data-i18n="langEn">EN</button>
         </div>
         <div class="rail-foot">
-          <p data-i18n="railFoot">Демо-данные. Изменения сохраняются только в этом браузере.</p>
+          <p id="session-email" class="session-email" hidden></p>
+          <p id="invite-line" class="invite-line" hidden></p>
+          <button class="text-btn" id="sign-out" type="button" hidden data-i18n="signOut">Выйти</button>
+          <p data-i18n="railFoot">Общий учёт для двоих. Данные только после входа.</p>
         </div>
       </aside>
 
@@ -122,6 +125,39 @@
           </article>
         </section>
       </main>
+    </div>
+
+    <div class="gate" id="gate">
+      <div class="sheet-panel" role="dialog" aria-labelledby="gate-title">
+        <header class="sheet-head">
+          <h2 id="gate-title" data-i18n="authTitle">Вход в Folio</h2>
+        </header>
+        <p class="gate-copy" id="gate-copy" data-i18n="authCopy">Два аккаунта, один журнал. Без входа данные недоступны.</p>
+        <p class="sync-status is-error" id="auth-error" hidden></p>
+
+        <form id="auth-form">
+          <label>
+            <span data-i18n="email">Почта</span>
+            <input name="email" type="email" required autocomplete="username" />
+          </label>
+          <label>
+            <span data-i18n="password">Пароль</span>
+            <input name="password" type="password" required minlength="6" autocomplete="current-password" />
+          </label>
+          <button class="primary wide" type="submit" id="auth-submit" data-i18n="signIn">Войти</button>
+          <button class="text-btn wide" type="button" id="auth-toggle" data-i18n="needAccount">Нет аккаунта? Создать</button>
+        </form>
+
+        <form id="household-form" hidden>
+          <button class="primary wide" type="button" id="create-household" data-i18n="createHousehold">Создать журнал</button>
+          <p class="hint" data-i18n="orJoin">или войти по коду второго человека</p>
+          <label>
+            <span data-i18n="inviteCode">Код приглашения</span>
+            <input name="invite" maxlength="16" autocomplete="off" data-i18n-placeholder="invitePlaceholder" placeholder="ABCD1234" />
+          </label>
+          <button class="ghost wide" type="submit" data-i18n="joinHousehold">Присоединиться</button>
+        </form>
+      </div>
     </div>
 
     <div class="sheet" id="sheet" hidden>

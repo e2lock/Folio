@@ -1,0 +1,33 @@
+# Secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+credentials.json
+service-account*.json
+secrets*.json
+token.json
+
+# Local AI / editor
+.claude/
+.cursor/
+.codex/
+.gemini/
+.mcp.json
+claude_desktop_config.json
+*.log
+*.sqlite
+*.sqlite3
+
+# Node / Python leftovers
+node_modules/
+dist/
+build/
+.venv/
+__pycache__/

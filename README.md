@@ -6,23 +6,28 @@ PWA для семейного учёта финансов. Frontend на GitHub 
 - **Репо:** https://github.com/e2lock/Folio
 - **Supabase:** `hachqbmborhqahwcqatr` (eu-central-1)
 
+Доступ только после входа. Журнал рассчитан на двоих: первый создаёт household, второй входит по коду.
+
 ## Быстрый старт
 
-### 1. Supabase (уже настроено)
+### 1. Supabase Auth
 
-`config.js` содержит URL и anon key проекта. Схема БД — в `supabase/migrations/`.
+В [Authentication → Providers](https://supabase.com/dashboard/project/hachqbmborhqahwcqatr/auth/providers) включите Email.
 
-### 2. GitHub ↔ Supabase Integration
+В [URL Configuration](https://supabase.com/dashboard/project/hachqbmborhqahwcqatr/auth/url-configuration) должны быть:
 
-Подключение репозитория к проекту Supabase (миграции деплоятся автоматически):
+- Site URL: `https://e2lock.github.io/Folio/`
+- Redirect: `https://e2lock.github.io/Folio/` и `http://127.0.0.1:5173/`
 
-1. Откройте [Integrations → GitHub](https://supabase.com/dashboard/project/hachqbmborhqahwcqatr/settings/integrations)
-2. **Authorize GitHub** → выберите репозиторий **e2lock/Folio**
-3. **Working directory:** `.` (корень репо, папка `supabase/` здесь)
-4. Включите **Deploy to production** (push/merge в `main` → применяются миграции)
-5. **Enable integration**
+Для двоих удобно выключить Confirm email, иначе второму аккаунту нужно письмо.
 
-После push в `main` Supabase применит новые файлы из `supabase/migrations/`.
+### 2. Первый и второй человек
+
+1. Откройте сайт → **Создать аккаунт**.
+2. Нажмите **Создать журнал** — появится код в боковой колонке.
+3. Второй человек регистрируется и вводит этот код.
+
+Anon key в `config.js` публичный. Данные закрывает RLS, не ключ.
 
 ### 3. GitHub Pages
 
@@ -40,10 +45,9 @@ powershell -ExecutionPolicy Bypass -File .\serve.ps1
 
 | Файл | Назначение |
 |------|------------|
-| `config.js` | URL и anon key Supabase |
-| `db.js` | Загрузка и сохранение операций |
-| `supabase/config.toml` | Конфиг для GitHub Integration |
-| `supabase/migrations/` | Миграции БД (деплой через GitHub) |
-| `supabase/schema.sql` | Справочная копия схемы |
+| `config.js` | Публичный URL и anon key |
+| `db.js` | Auth, household, операции |
+| `supabase/migrations/` | Схема и RLS |
+| `AGENTS.md` / `SECURITY.md` | Правила для агента и инцидент |
 
-**Не публикуйте** `service_role` key — только `anon` key в `config.js`.
+**Не публикуйте** `service_role` key.

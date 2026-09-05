@@ -1,0 +1,11 @@
+title = "Folio"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public Supabase anon key is required for GitHub Pages. RLS is the access control."
+paths = [
+  '''(^|/)config\.js$''',
+  '''(^|/)config\.example\.js$''',
+]

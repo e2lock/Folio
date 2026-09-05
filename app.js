@@ -5,6 +5,10 @@ const state = {
   items: [],
   loading: true,
   syncError: null,
+  session: null,
+  household: null,
+  authMode: "signin",
+  authError: null,
 };
 
 function normalizeItem(item) {
@@ -95,6 +99,66 @@ function setView(view) {
   });
   document.getElementById("view-overview").hidden = view !== "overview";
   document.getElementById("view-activity").hidden = view !== "activity";
+}
+
+function authErrorText(code) {
+  const map = {
+    invalid_code: "authInvalidCode",
+    household_full: "authHouseholdFull",
+    already_in_household: "authAlreadyIn",
+    config: "syncConfig",
+  };
+  return i18n.t(map[code] || "authFailed");
+}
+
+function renderGate() {
+  const gate = document.getElementById("gate");
+  const authForm = document.getElementById("auth-form");
+  const householdForm = document.getElementById("household-form");
+  const title = document.getElementById("gate-title");
+  const copy = document.getElementById("gate-copy");
+  const error = document.getElementById("auth-error");
+  const submit = document.getElementById("auth-submit");
+  const toggle = document.getElementById("auth-toggle");
+  const signedIn = Boolean(state.session);
+  const ready = signedIn && state.household;
+
+  gate.hidden = ready;
+  document.body.classList.toggle("is-locked", !ready);
+
+  if (error) {
+    error.hidden = !state.authError;
+    error.textContent = state.authError || "";
+  }
+
+  if (!signedIn) {
+    authForm.hidden = false;
+    householdForm.hidden = true;
+    title.textContent = i18n.t(state.authMode === "signup" ? "signUpTitle" : "authTitle");
+    copy.textContent = i18n.t("authCopy");
+    submit.textContent = i18n.t(state.authMode === "signup" ? "signUp" : "signIn");
+    toggle.textContent = i18n.t(state.authMode === "signup" ? "haveAccount" : "needAccount");
+  } else if (!state.household) {
+    authForm.hidden = true;
+    householdForm.hidden = false;
+    title.textContent = i18n.t("householdTitle");
+    copy.textContent = i18n.t("householdCopy");
+  }
+
+  const email = document.getElementById("session-email");
+  const invite = document.getElementById("invite-line");
+  const signOut = document.getElementById("sign-out");
+  if (email) {
+    email.hidden = !state.session;
+    email.textContent = state.session?.user?.email || "";
+  }
+  if (invite) {
+    invite.hidden = !state.household?.invite_code;
+    invite.textContent = state.household?.invite_code
+      ? i18n.t("inviteLine", { code: state.household.invite_code })
+      : "";
+  }
+  if (signOut) signOut.hidden = !state.session;
 }
 
 function renderSyncStatus() {
@@ -240,6 +304,7 @@ function renderChips() {
 }
 
 function render() {
+  renderGate();
   renderSyncStatus();
   const { balance, income, spend } = totals();
   document.getElementById("balance-figure").textContent = i18n.formatMoney(balance);
@@ -276,6 +341,32 @@ function setBusy(busy) {
   renderSyncStatus();
 }
 
+async function loadLedger() {
+  if (!state.session || !state.household) {
+    state.items = [];
+    return;
+  }
+  state.items = (await db.loadItems()).map(normalizeItem);
+}
+
+async function applySession(session) {
+  state.session = session;
+  state.household = null;
+  state.items = [];
+  state.authError = null;
+  if (!session) return;
+  try {
+    state.household = await db.getHousehold();
+    if (state.household) {
+      await loadLedger();
+      state.syncError = null;
+    }
+  } catch (error) {
+    console.error(error);
+    state.syncError = i18n.t("syncError");
+  }
+}
+
 async function boot() {
   setBusy(true);
   db.init();
@@ -286,13 +377,17 @@ async function boot() {
     render();
     return;
   }
+  db.onAuthChange(async (session) => {
+    setBusy(true);
+    await applySession(session);
+    setBusy(false);
+    render();
+  });
   try {
-    state.items = (await db.loadItems()).map(normalizeItem);
-    state.syncError = null;
+    await applySession(await db.getSession());
   } catch (error) {
     console.error(error);
     state.syncError = i18n.t("syncError");
-    state.items = [];
   }
   setBusy(false);
   render();
@@ -377,6 +472,92 @@ document.getElementById("compose-form").addEventListener("submit", async (event)
     state.syncError = i18n.t("syncSaveError");
     render();
   }
+});
+
+document.getElementById("auth-toggle").addEventListener("click", () => {
+  state.authMode = state.authMode === "signup" ? "signin" : "signup";
+  state.authError = null;
+  renderGate();
+});
+
+document.getElementById("auth-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (state.loading || !db.ready) return;
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const email = String(data.get("email") || "").trim();
+  const password = String(data.get("password") || "");
+  setBusy(true);
+  state.authError = null;
+  try {
+    if (state.authMode === "signup") {
+      await db.signUp(email, password);
+      try {
+        await db.signIn(email, password);
+      } catch {
+        state.authError = i18n.t("authConfirmEmail");
+      }
+    } else {
+      await db.signIn(email, password);
+    }
+  } catch (error) {
+    console.error(error);
+    state.authError = error.message || i18n.t("authFailed");
+  }
+  setBusy(false);
+  render();
+});
+
+document.getElementById("create-household").addEventListener("click", async () => {
+  if (state.loading || !db.ready) return;
+  setBusy(true);
+  state.authError = null;
+  try {
+    state.household = await db.createHousehold();
+    await loadLedger();
+    state.syncError = null;
+  } catch (error) {
+    console.error(error);
+    state.authError = authErrorText(error.code || error.message);
+  }
+  setBusy(false);
+  render();
+});
+
+document.getElementById("household-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (state.loading || !db.ready) return;
+  const invite = String(new FormData(event.currentTarget).get("invite") || "").trim();
+  if (!invite) {
+    state.authError = i18n.t("authInvalidCode");
+    renderGate();
+    return;
+  }
+  setBusy(true);
+  state.authError = null;
+  try {
+    state.household = await db.joinHousehold(invite);
+    await loadLedger();
+    state.syncError = null;
+  } catch (error) {
+    console.error(error);
+    state.authError = authErrorText(error.code || error.message);
+  }
+  setBusy(false);
+  render();
+});
+
+document.getElementById("sign-out").addEventListener("click", async () => {
+  if (state.loading) return;
+  setBusy(true);
+  try {
+    await db.signOut();
+  } catch (error) {
+    console.error(error);
+    state.syncError = i18n.t("syncError");
+  }
+  setBusy(false);
+  render();
 });
 
 window.onLocaleChange = () => {

@@ -541,6 +541,38 @@ form select {
   display: none;
 }
 
+.gate {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(27, 24, 20, 0.48);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.gate[hidden] {
+  display: none;
+}
+
+.gate-copy,
+.invite-line,
+.session-email {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.session-email {
+  word-break: break-all;
+}
+
+body.is-locked .app {
+  filter: blur(2px);
+  pointer-events: none;
+  user-select: none;
+}
+
 .sheet {
   position: fixed;
   inset: 0;
