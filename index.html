@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Folio — личный учёт</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,620&family=Outfit:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="rail">
+        <div class="brand">
+          <span class="mark" aria-hidden="true"></span>
+          <div>
+            <strong>Folio</strong>
+            <p data-i18n="brandSubtitle">Журнал за сентябрь</p>
+          </div>
+        </div>
+        <nav class="nav">
+          <button class="nav-btn is-active" data-view="overview" type="button" data-i18n="navOverview">Обзор</button>
+          <button class="nav-btn" data-view="activity" type="button" data-i18n="navActivity">Операции</button>
+        </nav>
+        <div class="locale-switch" role="group" data-i18n-aria="languageGroup" aria-label="Язык">
+          <button class="chip is-on" data-locale="ru" type="button" data-i18n="langRu">RU</button>
+          <button class="chip" data-locale="en" type="button" data-i18n="langEn">EN</button>
+        </div>
+        <div class="rail-foot">
+          <p data-i18n="railFoot">Демо-данные. Изменения сохраняются только в этом браузере.</p>
+        </div>
+      </aside>
+
+      <main class="stage">
+        <section id="view-overview" class="view is-visible" data-i18n-aria="ariaOverview" aria-label="Обзор">
+          <header class="page-head">
+            <div>
+              <p class="eyebrow" id="greeting">Добрый вечер</p>
+              <h1 data-i18n="cashOnHand">Свободные средства</h1>
+            </div>
+            <button class="ghost" data-goto="activity" type="button" data-i18n="seeAllActivity">Все операции</button>
+          </header>
+
+          <div class="hero-grid">
+            <article class="card balance-card">
+              <p class="label" data-i18n="availableBalance">Доступный баланс</p>
+              <p class="balance" id="balance-figure">0 ₽</p>
+              <div class="split">
+                <div>
+                  <span class="dot income"></span>
+                  <p class="label" data-i18n="inThisMonth">Поступило в месяце</p>
+                  <p class="metric" id="income-figure">0 ₽</p>
+                </div>
+                <div>
+                  <span class="dot spend"></span>
+                  <p class="label" data-i18n="outThisMonth">Списано в месяце</p>
+                  <p class="metric" id="spend-figure">0 ₽</p>
+                </div>
+              </div>
+            </article>
+
+            <article class="card chart-card">
+              <div class="card-head">
+                <h2 data-i18n="spendByCategory">Расходы по категориям</h2>
+                <p class="hint" id="chart-hint"></p>
+              </div>
+              <div class="chart-row">
+                <div class="donut-wrap">
+                  <svg id="donut" viewBox="0 0 160 160" role="img" aria-label="Расходы по категориям"></svg>
+                  <div class="donut-center" aria-hidden="true">
+                    <span class="donut-label" id="donut-label" data-i18n="chartOutflow">Расход</span>
+                    <strong class="donut-value" id="donut-value">0 ₽</strong>
+                  </div>
+                </div>
+                <ul class="legend" id="legend"></ul>
+              </div>
+            </article>
+          </div>
+
+          <article class="card week-card">
+            <div class="card-head">
+              <h2 data-i18n="lastSevenDays">Последние 7 дней</h2>
+              <p class="hint" data-i18n="dailyOutflow">Ежедневные траты</p>
+            </div>
+            <div class="bars" id="week-bars"></div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2 data-i18n="recentActivity">Недавние операции</h2>
+              <button class="text-btn" data-goto="activity" type="button" data-i18n="openLedger">Открыть журнал</button>
+            </div>
+            <ul class="tx-list" id="recent-list"></ul>
+          </article>
+        </section>
+
+        <section id="view-activity" class="view" hidden data-i18n-aria="ariaActivity" aria-label="Операции">
+          <header class="page-head">
+            <div>
+              <p class="eyebrow" data-i18n="ledgerEyebrow">Журнал</p>
+              <h1 data-i18n="activityTitle">Операции</h1>
+            </div>
+            <button class="primary" id="open-compose" type="button" data-i18n="addEntry">Добавить запись</button>
+          </header>
+
+          <div class="toolbar">
+            <label class="search">
+              <span class="sr-only" data-i18n="searchLabel">Поиск по месту или заметке</span>
+              <input id="search" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="Поиск по месту или заметке" />
+            </label>
+            <div class="chips" id="chips"></div>
+          </div>
+
+          <article class="card">
+            <ul class="tx-list" id="full-list"></ul>
+            <p class="empty" id="empty-state" hidden data-i18n="emptyState">Нет записей по этому фильтру.</p>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <div class="sheet" id="sheet" hidden>
+      <div class="sheet-panel" role="dialog" aria-labelledby="compose-title">
+        <header class="sheet-head">
+          <h2 id="compose-title" data-i18n="composeTitle">Новая запись</h2>
+          <button class="icon-btn" id="close-compose" type="button" data-i18n-aria="close" aria-label="Закрыть">×</button>
+        </header>
+        <form id="compose-form">
+          <label>
+            <span data-i18n="merchant">Место</span>
+            <input name="merchant" required maxlength="48" data-i18n-placeholder="merchantPlaceholder" placeholder="Кофейня" />
+          </label>
+          <label>
+            <span data-i18n="note">Заметка</span>
+            <input name="note" maxlength="72" data-i18n-placeholder="notePlaceholder" placeholder="Необязательно" />
+          </label>
+          <div class="form-row">
+            <label>
+              <span data-i18n="amount">Сумма</span>
+              <input name="amount" type="number" step="0.01" min="0.01" required data-i18n-placeholder="amountPlaceholder" placeholder="2400" />
+            </label>
+            <label>
+              <span data-i18n="type">Тип</span>
+              <select name="kind">
+                <option value="expense">Расход</option>
+                <option value="income">Доход</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              <span data-i18n="category">Категория</span>
+              <select name="category"></select>
+            </label>
+            <label>
+              <span data-i18n="date">Дата</span>
+              <input name="date" type="date" required />
+            </label>
+          </div>
+          <button class="primary wide" type="submit" data-i18n="saveEntry">Сохранить</button>
+        </form>
+      </div>
+    </div>
+
+    <script src="i18n.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
