@@ -1,8 +1,29 @@
+param(
+  [int]$Port = 5173
+)
+
 $root = $PSScriptRoot
-$prefix = "http://127.0.0.1:5173/"
+$prefix = "http://127.0.0.1:$Port/"
 $listener = [System.Net.HttpListener]::new()
 $listener.Prefixes.Add($prefix)
-$listener.Start()
+
+try {
+  $listener.Start()
+} catch [System.Net.HttpListenerException] {
+  $existing = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match 'serve\.ps1' -and $_.ProcessId -ne $PID } |
+    Select-Object -ExpandProperty ProcessId -First 1
+
+  Write-Host "Порт $Port уже занят — второй экземпляр serve.ps1 не нужен."
+  Write-Host "Откройте: $prefix"
+  if ($existing) {
+    Write-Host "Уже запущен процесс serve.ps1 (PID $existing). Остановка: Stop-Process -Id $existing -Force"
+  } else {
+    Write-Host "Перезапуск: найдите процесс на порту $Port и остановите его, затем снова запустите serve.ps1."
+  }
+  exit 1
+}
+
 Write-Host "Folio запущен: $prefix"
 Write-Host "Нажмите Ctrl+C для остановки."
 
@@ -36,6 +57,8 @@ try {
     $ctx.Response.Close()
   }
 } finally {
-  $listener.Stop()
+  if ($listener.IsListening) {
+    $listener.Stop()
+  }
   $listener.Close()
 }

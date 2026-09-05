@@ -9,6 +9,8 @@ const state = {
   syncError: null,
   session: null,
   household: null,
+  journals: [],
+  membershipRole: null,
   authMode: "signin",
   authError: null,
 };
@@ -168,23 +170,42 @@ function setView(view) {
 
 function authErrorText(code) {
   const map = {
-    invalid_code: "authInvalidCode",
     household_full: "authHouseholdFull",
-    already_in_household: "authAlreadyIn",
     config: "syncConfig",
   };
   return i18n.t(map[code] || "authFailed");
 }
 
+function renderJournalSwitch() {
+  const wrap = document.getElementById("journal-switch");
+  const block = document.getElementById("journal-block");
+  if (!wrap || !block) return;
+  const ready = Boolean(state.session && state.household);
+  block.hidden = !ready;
+  if (!ready) {
+    wrap.replaceChildren();
+    return;
+  }
+  wrap.replaceChildren();
+  state.journals.forEach((journal) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `nav-btn${journal.id === state.household.id ? " is-active" : ""}`;
+    btn.dataset.journalId = journal.id;
+    btn.textContent = journal.name;
+    wrap.appendChild(btn);
+  });
+}
+
 function renderGate() {
   const gate = document.getElementById("gate");
   const authForm = document.getElementById("auth-form");
-  const householdForm = document.getElementById("household-form");
   const title = document.getElementById("gate-title");
   const copy = document.getElementById("gate-copy");
   const error = document.getElementById("auth-error");
   const submit = document.getElementById("auth-submit");
   const toggle = document.getElementById("auth-toggle");
+  const gateSignOut = document.getElementById("gate-sign-out");
   const signedIn = Boolean(state.session);
   const ready = signedIn && state.household;
 
@@ -198,32 +219,40 @@ function renderGate() {
 
   if (!signedIn) {
     authForm.hidden = false;
-    householdForm.hidden = true;
     title.textContent = i18n.t(state.authMode === "signup" ? "signUpTitle" : "authTitle");
-    copy.textContent = i18n.t("authCopy");
+    if (copy) {
+      copy.hidden = true;
+      copy.textContent = "";
+    }
     submit.textContent = i18n.t(state.authMode === "signup" ? "signUp" : "signIn");
     toggle.textContent = i18n.t(state.authMode === "signup" ? "haveAccount" : "needAccount");
+    if (gateSignOut) gateSignOut.hidden = true;
   } else if (!state.household) {
     authForm.hidden = true;
-    householdForm.hidden = false;
     title.textContent = i18n.t("householdTitle");
-    copy.textContent = i18n.t("householdCopy");
+    if (copy) {
+      copy.hidden = false;
+      copy.textContent = state.authError || i18n.t("householdCopy");
+    }
+    if (gateSignOut) gateSignOut.hidden = false;
   }
 
   const email = document.getElementById("session-email");
-  const invite = document.getElementById("invite-line");
   const signOut = document.getElementById("sign-out");
   if (email) {
     email.hidden = !state.session;
     email.textContent = state.session?.user?.email || "";
   }
+  if (signOut) signOut.hidden = !state.session;
+  const invite = document.getElementById("invite-line");
+  const showInvite = Boolean(state.household?.invite_code);
   if (invite) {
-    invite.hidden = !state.household?.invite_code;
-    invite.textContent = state.household?.invite_code
+    invite.hidden = !showInvite;
+    invite.textContent = showInvite
       ? i18n.t("inviteLine", { code: state.household.invite_code })
       : "";
   }
-  if (signOut) signOut.hidden = !state.session;
+  renderJournalSwitch();
 }
 
 function renderSyncStatus() {
@@ -410,24 +439,51 @@ async function loadLedger() {
     state.items = [];
     return;
   }
-  state.items = (await db.loadItems()).map(normalizeItem);
+  state.items = (await db.loadItems(state.household.id)).map(normalizeItem);
+}
+
+function applyJournalList(list, preferredId) {
+  state.journals = list || [];
+  state.household =
+    state.journals.find((row) => row.id === preferredId) ||
+    state.journals.find((row) => row.active) ||
+    state.journals[0] ||
+    null;
+  state.membershipRole = state.household?.role || null;
+}
+
+async function refreshJournals(preferredId) {
+  applyJournalList(await db.ensureJournals(), preferredId);
+  if (state.household) {
+    await loadLedger();
+    state.syncError = null;
+    state.authError = null;
+  } else {
+    state.items = [];
+  }
 }
 
 async function applySession(session) {
   state.session = session;
   state.household = null;
+  state.journals = [];
+  state.membershipRole = null;
   state.items = [];
-  state.authError = null;
-  if (!session) return;
+  if (!session) {
+    state.authError = null;
+    return;
+  }
   try {
-    state.household = await db.getHousehold();
-    if (state.household) {
-      await loadLedger();
-      state.syncError = null;
-    }
+    await refreshJournals();
   } catch (error) {
     console.error(error);
-    state.syncError = i18n.t("syncError");
+    const code = error.code || error.message;
+    if (code === "household_full") {
+      state.authError = i18n.t("authHouseholdFull");
+    } else {
+      state.syncError = i18n.t("syncError");
+      state.authError = i18n.t("syncError");
+    }
   }
 }
 
@@ -566,7 +622,11 @@ document.getElementById("auth-toggle").addEventListener("click", () => {
 
 document.getElementById("auth-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (state.loading || !db.ready) return;
+  if (!db.ready) {
+    state.authError = i18n.t("syncConfig");
+    renderGate();
+    return;
+  }
   const form = event.currentTarget;
   const data = new FormData(form);
   const email = String(data.get("email") || "").trim();
@@ -592,47 +652,24 @@ document.getElementById("auth-form").addEventListener("submit", async (event) =>
   render();
 });
 
-document.getElementById("create-household").addEventListener("click", async () => {
-  if (state.loading || !db.ready) return;
+document.getElementById("journal-switch")?.addEventListener("click", async (event) => {
+  const btn = event.target.closest("[data-journal-id]");
+  const id = btn?.dataset.journalId;
+  if (!id || state.loading || id === state.household?.id) return;
   setBusy(true);
-  state.authError = null;
   try {
-    state.household = await db.createHousehold();
-    await loadLedger();
-    state.syncError = null;
+    await db.setActiveHousehold(id);
+    await refreshJournals(id);
   } catch (error) {
     console.error(error);
-    state.authError = authErrorText(error.code || error.message);
+    state.syncError = authErrorText(error.code || error.message);
   }
   setBusy(false);
   render();
 });
 
-document.getElementById("household-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (state.loading || !db.ready) return;
-  const invite = String(new FormData(event.currentTarget).get("invite") || "").trim();
-  if (!invite) {
-    state.authError = i18n.t("authInvalidCode");
-    renderGate();
-    return;
-  }
-  setBusy(true);
-  state.authError = null;
-  try {
-    state.household = await db.joinHousehold(invite);
-    await loadLedger();
-    state.syncError = null;
-  } catch (error) {
-    console.error(error);
-    state.authError = authErrorText(error.code || error.message);
-  }
-  setBusy(false);
-  render();
-});
-
-document.getElementById("sign-out").addEventListener("click", async () => {
-  if (state.loading) return;
+async function handleSignOut() {
+  if (!db.ready) return;
   setBusy(true);
   try {
     await db.signOut();
@@ -642,6 +679,9 @@ document.getElementById("sign-out").addEventListener("click", async () => {
   }
   setBusy(false);
   render();
-});
+}
+
+document.getElementById("sign-out")?.addEventListener("click", handleSignOut);
+document.getElementById("gate-sign-out")?.addEventListener("click", handleSignOut);
 
 boot();

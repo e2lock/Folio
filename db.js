@@ -17,6 +17,7 @@ function mapRow(row) {
     kind: row.kind,
     category: i18n.normalizeCategory(row.category),
     date: String(row.date).slice(0, 10),
+    householdId: row.household_id || null,
   };
 }
 
@@ -32,11 +33,29 @@ function toRow(item) {
   };
 }
 
+function asJson(data) {
+  if (data == null) return null;
+  if (typeof data === "string") {
+    try {
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+  return data;
+}
+
+function asHouseholdList(data) {
+  const rows = asJson(data);
+  if (Array.isArray(rows)) return rows.filter((row) => row && row.id);
+  if (rows && rows.id) return [rows];
+  return [];
+}
+
 function rpcMessage(error) {
   const raw = String(error?.message || error || "");
-  if (raw.includes("invalid_code")) return "invalid_code";
   if (raw.includes("household_full")) return "household_full";
-  if (raw.includes("already_in_household")) return "already_in_household";
+  if (raw.includes("not_in_household")) return "not_in_household";
   return "auth";
 }
 
@@ -100,47 +119,38 @@ const db = {
     if (error) throw error;
   },
 
-  async getHousehold() {
+  async ensureJournals() {
     if (!this.ready) throw new Error("not_ready");
-    const { data, error } = await this.client
-      .from("households")
-      .select("id, invite_code, name")
-      .maybeSingle();
-    if (error) throw error;
-    return data;
-  },
-
-  async createHousehold() {
-    if (!this.ready) throw new Error("not_ready");
-    const { data, error } = await this.client.rpc("create_household");
+    const { data, error } = await this.client.rpc("ensure_named_journals");
     if (error) {
       const code = rpcMessage(error);
       const err = new Error(code);
       err.code = code;
       throw err;
     }
-    return data;
+    return asHouseholdList(data);
   },
 
-  async joinHousehold(invite) {
+  async setActiveHousehold(id) {
     if (!this.ready) throw new Error("not_ready");
-    const { data, error } = await this.client.rpc("join_household", { invite: String(invite || "").trim() });
+    const { error } = await this.client.rpc("set_active_household", { target: id });
     if (error) {
       const code = rpcMessage(error);
       const err = new Error(code);
       err.code = code;
       throw err;
     }
-    return data;
   },
 
-  async loadItems() {
+  async loadItems(householdId) {
     if (!this.ready) throw new Error(this.lastError || "not_ready");
-    const { data, error } = await this.client
+    let query = this.client
       .from("transactions")
-      .select("id, merchant, note, amount, kind, category, date")
+      .select("id, merchant, note, amount, kind, category, date, household_id")
       .order("date", { ascending: false })
       .order("id", { ascending: false });
+    if (householdId) query = query.eq("household_id", householdId);
+    const { data, error } = await query;
     if (error) throw error;
     return (data || []).map(mapRow);
   },

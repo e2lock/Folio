@@ -37,6 +37,10 @@
           </div>
           <button class="text-btn month-now" id="month-now" type="button" data-i18n="currentMonth" data-i18n-aria="goToCurrentMonth" aria-label="Текущий месяц">Текущий месяц</button>
         </div>
+        <div class="journal-block" id="journal-block" hidden>
+          <p class="journal-label" data-i18n="journalLabel">Журнал</p>
+          <div class="journal-switch" id="journal-switch" role="group" data-i18n-aria="journalLabel" aria-label="Журнал"></div>
+        </div>
         <nav class="nav">
           <button class="nav-btn is-active" data-view="overview" type="button" data-i18n="navOverview">Обзор</button>
           <button class="nav-btn" data-view="activity" type="button" data-i18n="navActivity">Операции</button>
@@ -45,7 +49,7 @@
           <p id="session-email" class="session-email" hidden></p>
           <p id="invite-line" class="invite-line" hidden></p>
           <button class="text-btn" id="sign-out" type="button" hidden data-i18n="signOut">Выйти</button>
-          <p data-i18n="railFoot">Общий учёт для двоих. Данные только после входа.</p>
+          <p class="rail-note" data-i18n="railFoot">Общий учёт для двоих. Данные только после входа.</p>
         </div>
       </aside>
 
@@ -144,10 +148,11 @@
 
     <div class="gate" id="gate">
       <div class="sheet-panel" role="dialog" aria-labelledby="gate-title">
-        <header class="sheet-head">
-          <h2 id="gate-title" data-i18n="authTitle">Вход в Folio</h2>
+        <header class="sheet-head gate-head">
+          <span class="mark" aria-hidden="true"></span>
+          <h2 id="gate-title" data-i18n="authTitle">Folio</h2>
         </header>
-        <p class="gate-copy" id="gate-copy" data-i18n="authCopy">Два аккаунта, один журнал. Без входа данные недоступны.</p>
+        <p class="gate-copy" id="gate-copy" hidden></p>
         <p class="sync-status is-error" id="auth-error" hidden></p>
 
         <form id="auth-form">
@@ -162,16 +167,7 @@
           <button class="primary wide" type="submit" id="auth-submit" data-i18n="signIn">Войти</button>
           <button class="text-btn wide" type="button" id="auth-toggle" data-i18n="needAccount">Нет аккаунта? Создать</button>
         </form>
-
-        <form id="household-form" hidden>
-          <button class="primary wide" type="button" id="create-household" data-i18n="createHousehold">Создать журнал</button>
-          <p class="hint" data-i18n="orJoin">или войти по коду второго человека</p>
-          <label>
-            <span data-i18n="inviteCode">Код приглашения</span>
-            <input name="invite" maxlength="16" autocomplete="off" data-i18n-placeholder="invitePlaceholder" placeholder="ABCD1234" />
-          </label>
-          <button class="ghost wide" type="submit" data-i18n="joinHousehold">Присоединиться</button>
-        </form>
+        <button class="text-btn wide" id="gate-sign-out" type="button" hidden data-i18n="signOut">Выйти</button>
       </div>
     </div>
 
