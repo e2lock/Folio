@@ -119,6 +119,12 @@ const db = {
     if (error) throw error;
   },
 
+  async updatePassword(password) {
+    if (!this.ready) throw new Error("not_ready");
+    const { error } = await this.client.auth.updateUser({ password });
+    if (error) throw error;
+  },
+
   async ensureJournals() {
     if (!this.ready) throw new Error("not_ready");
     const { data, error } = await this.client.rpc("ensure_named_journals");

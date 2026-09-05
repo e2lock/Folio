@@ -47,7 +47,7 @@
         </nav>
         <div class="rail-foot">
           <p id="session-email" class="session-email" hidden></p>
-          <p id="invite-line" class="invite-line" hidden></p>
+          <button class="text-btn" id="change-password" type="button" hidden data-i18n="changePassword">Сменить пароль</button>
           <button class="text-btn" id="sign-out" type="button" hidden data-i18n="signOut">Выйти</button>
           <p class="rail-note" data-i18n="railFoot">Общий учёт для двоих. Данные только после входа.</p>
         </div>
@@ -165,9 +165,31 @@
             <input name="password" type="password" required minlength="6" autocomplete="current-password" />
           </label>
           <button class="primary wide" type="submit" id="auth-submit" data-i18n="signIn">Войти</button>
-          <button class="text-btn wide" type="button" id="auth-toggle" data-i18n="needAccount">Нет аккаунта? Создать</button>
+          <button class="text-btn wide" type="button" id="auth-toggle" data-i18n="needAccount">Создать аккаунт</button>
         </form>
+
         <button class="text-btn wide" id="gate-sign-out" type="button" hidden data-i18n="signOut">Выйти</button>
+      </div>
+    </div>
+
+    <div class="sheet" id="password-sheet" hidden>
+      <div class="sheet-panel" role="dialog" aria-labelledby="password-sheet-title">
+        <header class="sheet-head">
+          <h2 id="password-sheet-title" data-i18n="passwordSheetTitle">Сменить пароль</h2>
+          <button class="icon-btn" id="close-password-sheet" type="button" data-i18n-aria="close" aria-label="Закрыть">×</button>
+        </header>
+        <p class="sync-status is-error" id="password-error" hidden></p>
+        <form id="password-form">
+          <label>
+            <span data-i18n="newPassword">Новый пароль</span>
+            <input name="password" type="password" required minlength="6" autocomplete="new-password" />
+          </label>
+          <label>
+            <span data-i18n="confirmPassword">Повторите пароль</span>
+            <input name="confirm" type="password" required minlength="6" autocomplete="new-password" />
+          </label>
+          <button class="primary wide" type="submit" data-i18n="savePassword">Сохранить</button>
+        </form>
       </div>
     </div>
 

@@ -133,6 +133,18 @@ p {
   text-align: center;
 }
 
+.gate-head {
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.gate-head h2 {
+  font-size: 1.7rem;
+  letter-spacing: -0.03em;
+}
+
 .month-nav {
   width: 32px;
   height: 32px;
@@ -198,6 +210,10 @@ p {
 
 .rail-foot {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
   font-size: 0.82rem;
   line-height: 1.45;
 }
@@ -633,11 +649,15 @@ form select {
 }
 
 .gate-copy,
-.invite-line,
 .session-email {
   color: var(--muted);
   font-size: 0.88rem;
   line-height: 1.4;
+}
+
+.gate-copy:not([hidden]) {
+  margin: 0 0 16px;
+  text-align: center;
 }
 
 .gate-copy:not([hidden]) {
@@ -745,6 +765,11 @@ form label {
 
   .journal-block {
     width: 100%;
+  }
+
+  .journal-switch {
+    width: 100%;
+    flex-direction: column;
   }
 
   .rail-foot {

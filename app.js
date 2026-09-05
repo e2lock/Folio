@@ -13,6 +13,7 @@ const state = {
   membershipRole: null,
   authMode: "signin",
   authError: null,
+  passwordError: null,
 };
 
 function normalizeItem(item) {
@@ -170,10 +171,20 @@ function setView(view) {
 
 function authErrorText(code) {
   const map = {
+    invalid_code: "authInvalidCode",
     household_full: "authHouseholdFull",
+    already_in_household: "authAlreadyIn",
     config: "syncConfig",
   };
   return i18n.t(map[code] || "authFailed");
+}
+
+function renderPasswordSheet() {
+  const sheet = document.getElementById("password-sheet");
+  const error = document.getElementById("password-error");
+  if (!sheet || !error) return;
+  error.hidden = !state.passwordError;
+  error.textContent = state.passwordError || "";
 }
 
 function renderJournalSwitch() {
@@ -207,10 +218,9 @@ function renderGate() {
   const toggle = document.getElementById("auth-toggle");
   const gateSignOut = document.getElementById("gate-sign-out");
   const signedIn = Boolean(state.session);
-  const ready = signedIn && state.household;
 
-  gate.hidden = ready;
-  document.body.classList.toggle("is-locked", !ready);
+  gate.hidden = signedIn;
+  document.body.classList.toggle("is-locked", !signedIn);
 
   if (error) {
     error.hidden = !state.authError;
@@ -227,31 +237,24 @@ function renderGate() {
     submit.textContent = i18n.t(state.authMode === "signup" ? "signUp" : "signIn");
     toggle.textContent = i18n.t(state.authMode === "signup" ? "haveAccount" : "needAccount");
     if (gateSignOut) gateSignOut.hidden = true;
-  } else if (!state.household) {
+  } else {
     authForm.hidden = true;
-    title.textContent = i18n.t("householdTitle");
     if (copy) {
-      copy.hidden = false;
-      copy.textContent = state.authError || i18n.t("householdCopy");
+      copy.hidden = true;
+      copy.textContent = "";
     }
     if (gateSignOut) gateSignOut.hidden = false;
   }
 
   const email = document.getElementById("session-email");
   const signOut = document.getElementById("sign-out");
+  const changePassword = document.getElementById("change-password");
   if (email) {
     email.hidden = !state.session;
     email.textContent = state.session?.user?.email || "";
   }
   if (signOut) signOut.hidden = !state.session;
-  const invite = document.getElementById("invite-line");
-  const showInvite = Boolean(state.household?.invite_code);
-  if (invite) {
-    invite.hidden = !showInvite;
-    invite.textContent = showInvite
-      ? i18n.t("inviteLine", { code: state.household.invite_code })
-      : "";
-  }
+  if (changePassword) changePassword.hidden = !state.session;
   renderJournalSwitch();
 }
 
@@ -399,6 +402,7 @@ function render() {
   renderGate();
   renderSyncStatus();
   renderMonthChrome();
+  renderPasswordSheet();
   const { balance, income, spend } = totals();
   document.getElementById("balance-figure").textContent = i18n.formatMoney(balance);
   document.getElementById("income-figure").textContent = i18n.formatMoney(income);
@@ -428,9 +432,25 @@ function closeSheet() {
   document.getElementById("sheet").hidden = true;
 }
 
+function openPasswordSheet() {
+  const sheet = document.getElementById("password-sheet");
+  const form = document.getElementById("password-form");
+  if (!sheet || !form) return;
+  state.passwordError = null;
+  sheet.hidden = false;
+  form.reset();
+  renderPasswordSheet();
+}
+
+function closePasswordSheet() {
+  const sheet = document.getElementById("password-sheet");
+  if (sheet) sheet.hidden = true;
+  state.passwordError = null;
+}
+
 function setBusy(busy) {
   state.loading = busy;
-  document.getElementById("open-compose")?.toggleAttribute("disabled", busy);
+  document.getElementById("open-compose")?.toggleAttribute("disabled", busy || !state.household);
   renderSyncStatus();
 }
 
@@ -469,6 +489,7 @@ async function applySession(session) {
   state.journals = [];
   state.membershipRole = null;
   state.items = [];
+  state.passwordError = null;
   if (!session) {
     state.authError = null;
     return;
@@ -663,6 +684,40 @@ document.getElementById("journal-switch")?.addEventListener("click", async (even
   } catch (error) {
     console.error(error);
     state.syncError = authErrorText(error.code || error.message);
+  }
+  setBusy(false);
+  render();
+});
+
+document.getElementById("change-password")?.addEventListener("click", () => {
+  openPasswordSheet();
+});
+
+document.getElementById("close-password-sheet")?.addEventListener("click", closePasswordSheet);
+document.getElementById("password-sheet")?.addEventListener("click", (event) => {
+  if (event.target.id === "password-sheet") closePasswordSheet();
+});
+
+document.getElementById("password-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!db.ready) return;
+  const data = new FormData(event.currentTarget);
+  const password = String(data.get("password") || "");
+  const confirm = String(data.get("confirm") || "");
+  if (password !== confirm) {
+    state.passwordError = i18n.t("passwordMismatch");
+    renderPasswordSheet();
+    return;
+  }
+  setBusy(true);
+  state.passwordError = null;
+  try {
+    await db.updatePassword(password);
+    closePasswordSheet();
+  } catch (error) {
+    console.error(error);
+    state.passwordError = i18n.t("passwordChangeFailed");
+    renderPasswordSheet();
   }
   setBusy(false);
   render();
