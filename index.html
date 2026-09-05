@@ -3,7 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ece4d4" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Folio" />
     <title>Folio — личный учёт</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -22,19 +29,18 @@
             <p id="brand-subtitle">Журнал за сентябрь</p>
           </div>
         </div>
-        <div class="month-switch" role="group" data-i18n-aria="monthSwitchLabel" aria-label="Выбор месяца">
-          <button class="ghost month-nav" id="month-prev" type="button" data-i18n-aria="previousMonth" aria-label="Предыдущий месяц">‹</button>
-          <strong id="selected-month">Сентябрь 2026</strong>
-          <button class="ghost month-nav" id="month-next" type="button" data-i18n-aria="nextMonth" aria-label="Следующий месяц">›</button>
+        <div class="month-block">
+          <div class="month-switch" role="group" data-i18n-aria="monthSwitchLabel" aria-label="Выбор месяца">
+            <button class="ghost month-nav" id="month-prev" type="button" data-i18n-aria="previousMonth" aria-label="Предыдущий месяц">‹</button>
+            <strong id="selected-month">Сентябрь 2026</strong>
+            <button class="ghost month-nav" id="month-next" type="button" data-i18n-aria="nextMonth" aria-label="Следующий месяц">›</button>
+          </div>
+          <button class="text-btn month-now" id="month-now" type="button" data-i18n="currentMonth" data-i18n-aria="goToCurrentMonth" aria-label="Текущий месяц">Текущий месяц</button>
         </div>
         <nav class="nav">
           <button class="nav-btn is-active" data-view="overview" type="button" data-i18n="navOverview">Обзор</button>
           <button class="nav-btn" data-view="activity" type="button" data-i18n="navActivity">Операции</button>
         </nav>
-        <div class="locale-switch" role="group" data-i18n-aria="languageGroup" aria-label="Язык">
-          <button class="chip is-on" data-locale="ru" type="button" data-i18n="langRu">RU</button>
-          <button class="chip" data-locale="en" type="button" data-i18n="langEn">EN</button>
-        </div>
         <div class="rail-foot">
           <p id="session-email" class="session-email" hidden></p>
           <p id="invite-line" class="invite-line" hidden></p>
@@ -217,5 +223,6 @@
     <script src="i18n.js"></script>
     <script src="db.js"></script>
     <script src="app.js"></script>
+    <script src="pwa.js"></script>
   </body>
 </html>

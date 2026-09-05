@@ -1,7 +1,4 @@
-const LOCALE_KEY = "folio-locale-v1";
-
 const MESSAGES = {
-  ru: {
     appTitle: "Folio — личный учёт",
     brandSubtitle: "Журнал за {month}",
     railFoot: "Журнал только для двоих. Без входа данные закрыты.",
@@ -51,12 +48,11 @@ const MESSAGES = {
     syncConfig: "Добавьте URL и anon key Supabase в config.js и запушьте на GitHub.",
     syncError: "Ошибка Supabase. Проверьте config.js и SQL-схему в supabase/schema.sql.",
     syncSaveError: "Не удалось сохранить. Попробуйте ещё раз.",
-    langRu: "RU",
-    langEn: "EN",
-    languageGroup: "Язык",
     monthSwitchLabel: "Выбор месяца",
     previousMonth: "Предыдущий месяц",
     nextMonth: "Следующий месяц",
+    currentMonth: "Текущий месяц",
+    goToCurrentMonth: "Текущий месяц",
     onlySelectedMonth: "Только этот месяц",
     authTitle: "Вход в Folio",
     signUpTitle: "Создать аккаунт",
@@ -92,99 +88,6 @@ const MESSAGES = {
       income: "Доход",
       other: "Другое",
     },
-  },
-  en: {
-    appTitle: "Folio — personal ledger",
-    brandSubtitle: "Ledger for {month}",
-    railFoot: "A private ledger for two. Sign in to see any data.",
-    navOverview: "Overview",
-    navActivity: "Activity",
-    ariaOverview: "Overview",
-    ariaActivity: "Activity",
-    greetingMorning: "Good morning",
-    greetingAfternoon: "Good afternoon",
-    greetingEvening: "Good evening",
-    cashOnHand: "Cash on hand",
-    seeAllActivity: "See all activity",
-    availableBalance: "Available balance",
-    inThisMonth: "In this month",
-    outThisMonth: "Out this month",
-    spendByCategory: "Spend by category",
-    chartAria: "Spending by category",
-    chartOutflow: "Outflow",
-    chartCategories: "{count} categories this month",
-    chartNoSpend: "No spend this month",
-    lastSevenDays: "Last seven days",
-    dailyOutflow: "Daily outflow",
-    recentActivity: "Recent activity",
-    openLedger: "Open ledger",
-    ledgerEyebrow: "Ledger",
-    activityTitle: "Activity",
-    addEntry: "Add entry",
-    searchLabel: "Search merchant or note",
-    searchPlaceholder: "Search merchant or note",
-    emptyState: "No entries match this filter.",
-    composeTitle: "New entry",
-    close: "Close",
-    merchant: "Merchant",
-    merchantPlaceholder: "Blue Bottle",
-    note: "Note",
-    notePlaceholder: "Optional",
-    amount: "Amount",
-    amountPlaceholder: "24.00",
-    type: "Type",
-    typeExpense: "Expense",
-    typeIncome: "Income",
-    category: "Category",
-    date: "Date",
-    saveEntry: "Save to ledger",
-    remove: "Remove",
-    syncLoading: "Loading data…",
-    syncConfig: "Add your Supabase URL and anon key to config.js, then push to GitHub.",
-    syncError: "Supabase error. Check config.js and supabase/schema.sql.",
-    syncSaveError: "Could not save. Please try again.",
-    langRu: "RU",
-    langEn: "EN",
-    languageGroup: "Language",
-    monthSwitchLabel: "Month selector",
-    previousMonth: "Previous month",
-    nextMonth: "Next month",
-    onlySelectedMonth: "Only this month",
-    authTitle: "Sign in to Folio",
-    signUpTitle: "Create an account",
-    authCopy: "Two accounts, one ledger. Nothing is readable without a login.",
-    householdTitle: "Household ledger",
-    householdCopy: "The first person creates the ledger and shares the code. Two people only.",
-    email: "Email",
-    password: "Password",
-    signIn: "Sign in",
-    signUp: "Create account",
-    signOut: "Sign out",
-    needAccount: "Need an account? Sign up",
-    haveAccount: "Already have an account? Sign in",
-    createHousehold: "Create ledger",
-    orJoin: "or join with the other person's code",
-    inviteCode: "Invite code",
-    invitePlaceholder: "ABCD1234",
-    joinHousehold: "Join",
-    inviteLine: "Invite code: {code}",
-    authFailed: "Could not sign in. Check email and password.",
-    authConfirmEmail: "Account created. If you stay locked out, confirm the email from Supabase.",
-    authInvalidCode: "That invite code was not found.",
-    authHouseholdFull: "This ledger already has two people.",
-    authAlreadyIn: "This account is already in a ledger.",
-    categories: {
-      all: "All",
-      groceries: "Groceries",
-      dining: "Dining",
-      transit: "Transit",
-      rent: "Rent",
-      utilities: "Utilities",
-      health: "Health",
-      income: "Income",
-      other: "Other",
-    },
-  },
 };
 
 const CATEGORY_COLORS = {
@@ -212,38 +115,9 @@ const LEGACY_CATEGORY_MAP = {
   Other: "other",
 };
 
-let locale = resolveLocale();
-
-function resolveLocale() {
-  try {
-    const saved = localStorage.getItem(LOCALE_KEY);
-    if (saved && MESSAGES[saved]) return saved;
-  } catch {
-    /* ignore */
-  }
-  return navigator.language.toLowerCase().startsWith("ru") ? "ru" : "ru";
-}
-
-function setLocale(next) {
-  if (!MESSAGES[next]) return;
-  locale = next;
-  try {
-    localStorage.setItem(LOCALE_KEY, next);
-  } catch {
-    /* ignore */
-  }
-  document.documentElement.lang = next;
-  applyI18n();
-  if (typeof window.onLocaleChange === "function") window.onLocaleChange();
-}
-
-function getLocale() {
-  return locale;
-}
-
 function t(key, params = {}) {
   const parts = key.split(".");
-  let value = MESSAGES[locale];
+  let value = MESSAGES;
   for (const part of parts) {
     value = value?.[part];
   }
@@ -263,16 +137,15 @@ function normalizeCategory(value) {
 }
 
 function formatMoney(amount) {
-  const currency = locale === "ru" ? "RUB" : "USD";
-  return new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-US", {
+  return new Intl.NumberFormat("ru-RU", {
     style: "currency",
-    currency,
+    currency: "RUB",
     maximumFractionDigits: 2,
   }).format(amount);
 }
 
 function formatShortDate(iso) {
-  return new Date(`${iso}T12:00:00`).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
+  return new Date(`${iso}T12:00:00`).toLocaleDateString("ru-RU", {
     month: "short",
     day: "numeric",
   });
@@ -280,14 +153,14 @@ function formatShortDate(iso) {
 
 function formatMonthYear(ym) {
   const [year, month] = ym.split("-").map(Number);
-  return new Date(year, month - 1, 1).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
+  return new Date(year, month - 1, 1).toLocaleDateString("ru-RU", {
     month: "long",
     year: "numeric",
   });
 }
 
 function formatWeekdayNarrow(date) {
-  return date.toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", { weekday: "narrow" });
+  return date.toLocaleDateString("ru-RU", { weekday: "narrow" });
 }
 
 function greetingForHour(hour = new Date().getHours()) {
@@ -339,17 +212,11 @@ function applyI18n() {
       <option value="income">${t("typeIncome")}</option>`;
   }
 
-  document.querySelectorAll("[data-locale]").forEach((btn) => {
-    btn.classList.toggle("is-on", btn.dataset.locale === locale);
-  });
 }
 
 window.i18n = {
-  LOCALE_KEY,
   CATEGORY_COLORS,
   CATEGORY_IDS,
-  getLocale,
-  setLocale,
   t,
   categoryLabel,
   normalizeCategory,
@@ -361,5 +228,5 @@ window.i18n = {
   applyI18n,
 };
 
-document.documentElement.lang = locale;
+document.documentElement.lang = "ru";
 applyI18n();

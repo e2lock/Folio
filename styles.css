@@ -82,11 +82,28 @@ p {
   align-items: center;
 }
 
+.month-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 .month-switch {
   display: flex;
   align-items: center;
   gap: 10px;
   color: var(--ink);
+}
+
+.text-btn.month-now,
+.text-btn.month-now:disabled {
+  color: var(--ink);
+  opacity: 1;
+}
+
+.text-btn.month-now:disabled {
+  cursor: default;
 }
 
 .month-switch strong {
@@ -161,16 +178,6 @@ p {
   margin-top: auto;
   font-size: 0.82rem;
   line-height: 1.45;
-}
-
-.locale-switch {
-  display: flex;
-  gap: 8px;
-}
-
-.locale-switch .chip {
-  min-width: 44px;
-  text-align: center;
 }
 
 .stage {
@@ -688,16 +695,17 @@ form label {
     flex-direction: row;
   }
 
+  .month-block,
+  .month-switch {
+    width: 100%;
+  }
+
   .month-switch {
     justify-content: space-between;
   }
 
   .rail-foot {
     display: none;
-  }
-
-  .locale-switch {
-    margin-left: 0;
   }
 
   .stage {

@@ -38,6 +38,42 @@ function isCurrentMonth(ym) {
   return ym === thisMonth();
 }
 
+const MONTH_PREFS_KEY = "folio-month-prefs-v1";
+
+function isValidMonth(ym) {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(ym || ""));
+}
+
+function loadMonthPrefs() {
+  try {
+    const raw = localStorage.getItem(MONTH_PREFS_KEY);
+    if (!raw) return { selectedMonth: thisMonth(), activityMonthOnly: false };
+    const parsed = JSON.parse(raw);
+    return {
+      selectedMonth: isValidMonth(parsed.selectedMonth) ? parsed.selectedMonth : thisMonth(),
+      activityMonthOnly: parsed.activityMonthOnly === true,
+    };
+  } catch {
+    return { selectedMonth: thisMonth(), activityMonthOnly: false };
+  }
+}
+
+function persistMonthPrefs() {
+  try {
+    localStorage.setItem(
+      MONTH_PREFS_KEY,
+      JSON.stringify({
+        selectedMonth: state.selectedMonth,
+        activityMonthOnly: state.activityMonthOnly,
+      })
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+Object.assign(state, loadMonthPrefs());
+
 function signed(item) {
   return item.kind === "income" ? item.amount : -item.amount;
 }
@@ -116,6 +152,9 @@ function renderMonthChrome() {
 
   const monthOnly = document.getElementById("month-only");
   if (monthOnly) monthOnly.checked = state.activityMonthOnly;
+
+  const nowBtn = document.getElementById("month-now");
+  if (nowBtn) nowBtn.disabled = isCurrentMonth(state.selectedMonth);
 }
 
 function setView(view) {
@@ -274,11 +313,9 @@ function renderBars() {
 
 function formatSignedAmount(item) {
   const sign = item.kind === "income" ? "+" : "−";
-  const localeTag = i18n.getLocale() === "ru" ? "ru-RU" : "en-US";
-  const currency = i18n.getLocale() === "ru" ? "RUB" : "USD";
-  const formatted = new Intl.NumberFormat(localeTag, {
+  const formatted = new Intl.NumberFormat("ru-RU", {
     style: "currency",
-    currency,
+    currency: "RUB",
     signDisplay: "never",
   }).format(item.amount);
   return `${sign}${formatted}`;
@@ -428,17 +465,21 @@ document.querySelectorAll("[data-goto]").forEach((btn) => {
   btn.addEventListener("click", () => setView(btn.dataset.goto));
 });
 
-document.querySelectorAll("[data-locale]").forEach((btn) => {
-  btn.addEventListener("click", () => i18n.setLocale(btn.dataset.locale));
-});
-
 document.getElementById("month-prev").addEventListener("click", () => {
   state.selectedMonth = shiftMonth(state.selectedMonth, -1);
+  persistMonthPrefs();
   render();
 });
 
 document.getElementById("month-next").addEventListener("click", () => {
   state.selectedMonth = shiftMonth(state.selectedMonth, 1);
+  persistMonthPrefs();
+  render();
+});
+
+document.getElementById("month-now").addEventListener("click", () => {
+  state.selectedMonth = thisMonth();
+  persistMonthPrefs();
   render();
 });
 
@@ -457,6 +498,7 @@ document.getElementById("search").addEventListener("input", (event) => {
 
 document.getElementById("month-only").addEventListener("change", (event) => {
   state.activityMonthOnly = event.target.checked;
+  persistMonthPrefs();
   renderLists();
 });
 
@@ -601,10 +643,5 @@ document.getElementById("sign-out").addEventListener("click", async () => {
   setBusy(false);
   render();
 });
-
-window.onLocaleChange = () => {
-  i18n.applyI18n();
-  render();
-};
 
 boot();
