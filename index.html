@@ -36,6 +36,7 @@
       </aside>
 
       <main class="stage">
+        <p class="sync-status" id="sync-status" hidden></p>
         <section id="view-overview" class="view is-visible" data-i18n-aria="ariaOverview" aria-label="Обзор">
           <header class="page-head">
             <div>
@@ -166,7 +167,10 @@
       </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
     <script src="i18n.js"></script>
+    <script src="db.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

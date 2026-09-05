@@ -1,39 +1,11 @@
-const STORAGE_KEY = "folio-ledger-v2";
-
-const SEED = [
-  { id: "t1", merchant: "Северный рынок", note: "Еженедельные покупки", amount: 8420, kind: "expense", category: "groceries", date: "2026-09-04" },
-  { id: "t2", merchant: "Зарплата", note: "1 сентября", amount: 320000, kind: "income", category: "income", date: "2026-09-01" },
-  { id: "t3", merchant: "Проездной", note: "На неделю", amount: 3300, kind: "expense", category: "transit", date: "2026-09-03" },
-  { id: "t4", merchant: "Кафе Lumen", note: "Обед с Аней", amount: 1840, kind: "expense", category: "dining", date: "2026-09-03" },
-  { id: "t5", merchant: "Аренда", note: "Квартира 4Б", amount: 145000, kind: "expense", category: "rent", date: "2026-09-01" },
-  { id: "t6", merchant: "Свет и вода", note: "Счёт за август", amount: 6215, kind: "expense", category: "utilities", date: "2026-09-02" },
-  { id: "t7", merchant: "Аптека", note: "Пополнение", amount: 2780, kind: "expense", category: "health", date: "2026-09-05" },
-  { id: "t8", merchant: "Книжный угол", note: "Карта метро", amount: 1400, kind: "expense", category: "other", date: "2026-09-05" },
-  { id: "t9", merchant: "Ресторан Дуб", note: "Ужин", amount: 4650, kind: "expense", category: "dining", date: "2026-09-02" },
-  { id: "t10", merchant: "Фриланс", note: "Счёт 118", amount: 45000, kind: "income", category: "income", date: "2026-08-28" },
-];
-
 const state = {
   view: "overview",
   query: "",
   category: "all",
-  items: loadItems(),
+  items: [],
+  loading: true,
+  syncError: null,
 };
-
-function loadItems() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length) {
-        return parsed.map(normalizeItem);
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  return SEED.slice();
-}
 
 function normalizeItem(item) {
   return {
@@ -42,16 +14,12 @@ function normalizeItem(item) {
   };
 }
 
-function saveItems() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.items));
-}
-
 function monthKey(iso) {
   return iso.slice(0, 7);
 }
 
 function thisMonth() {
-  return "2026-09";
+  return isoLocal(new Date()).slice(0, 7);
 }
 
 function signed(item) {
@@ -91,8 +59,9 @@ function isoLocal(d) {
 
 function lastSeven() {
   const days = [];
+  const anchor = new Date();
   for (let i = 6; i >= 0; i -= 1) {
-    const d = new Date(2026, 8, 5);
+    const d = new Date(anchor);
     d.setDate(d.getDate() - i);
     const iso = isoLocal(d);
     const spend = state.items
@@ -126,6 +95,25 @@ function setView(view) {
   });
   document.getElementById("view-overview").hidden = view !== "overview";
   document.getElementById("view-activity").hidden = view !== "activity";
+}
+
+function renderSyncStatus() {
+  const el = document.getElementById("sync-status");
+  if (!el) return;
+  if (state.loading) {
+    el.hidden = false;
+    el.className = "sync-status is-loading";
+    el.textContent = i18n.t("syncLoading");
+    return;
+  }
+  if (state.syncError) {
+    el.hidden = false;
+    el.className = "sync-status is-error";
+    el.textContent = state.syncError;
+    return;
+  }
+  el.hidden = true;
+  el.textContent = "";
 }
 
 function renderDonut(rows) {
@@ -252,6 +240,7 @@ function renderChips() {
 }
 
 function render() {
+  renderSyncStatus();
   const { balance, income, spend } = totals();
   document.getElementById("balance-figure").textContent = i18n.formatMoney(balance);
   document.getElementById("income-figure").textContent = i18n.formatMoney(income);
@@ -273,12 +262,40 @@ function openSheet() {
   sheet.hidden = false;
   const form = document.getElementById("compose-form");
   form.reset();
-  form.elements.date.value = "2026-09-05";
+  form.elements.date.value = isoLocal(new Date());
   form.elements.merchant.focus();
 }
 
 function closeSheet() {
   document.getElementById("sheet").hidden = true;
+}
+
+function setBusy(busy) {
+  state.loading = busy;
+  document.getElementById("open-compose")?.toggleAttribute("disabled", busy);
+  renderSyncStatus();
+}
+
+async function boot() {
+  setBusy(true);
+  db.init();
+  if (!db.ready) {
+    state.syncError = i18n.t("syncConfig");
+    state.items = [];
+    setBusy(false);
+    render();
+    return;
+  }
+  try {
+    state.items = (await db.loadItems()).map(normalizeItem);
+    state.syncError = null;
+  } catch (error) {
+    console.error(error);
+    state.syncError = i18n.t("syncError");
+    state.items = [];
+  }
+  setBusy(false);
+  render();
 }
 
 document.querySelectorAll(".nav-btn").forEach((btn) => {
@@ -306,12 +323,23 @@ document.getElementById("search").addEventListener("input", (event) => {
   renderLists();
 });
 
-document.getElementById("full-list").addEventListener("click", (event) => {
+document.getElementById("full-list").addEventListener("click", async (event) => {
   const btn = event.target.closest("[data-remove]");
-  if (!btn) return;
-  state.items = state.items.filter((item) => item.id !== btn.dataset.remove);
-  saveItems();
+  if (!btn || state.loading) return;
+  const id = btn.dataset.remove;
+  const prev = state.items.slice();
+  state.items = state.items.filter((item) => item.id !== id);
   render();
+  try {
+    await db.deleteItem(id);
+    state.syncError = null;
+    renderSyncStatus();
+  } catch (error) {
+    console.error(error);
+    state.items = prev;
+    state.syncError = i18n.t("syncSaveError");
+    render();
+  }
 });
 
 document.getElementById("open-compose").addEventListener("click", openSheet);
@@ -320,25 +348,35 @@ document.getElementById("sheet").addEventListener("click", (event) => {
   if (event.target.id === "sheet") closeSheet();
 });
 
-document.getElementById("compose-form").addEventListener("submit", (event) => {
+document.getElementById("compose-form").addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (state.loading || !db.ready) return;
   const form = event.currentTarget;
   const data = new FormData(form);
   const kind = data.get("kind");
-  const category = kind === "income" ? "income" : String(data.get("category"));
-  state.items.push({
+  const item = normalizeItem({
     id: `t${Date.now()}`,
     merchant: String(data.get("merchant")).trim(),
     note: String(data.get("note") || "").trim(),
     amount: Number(data.get("amount")),
     kind,
-    category,
+    category: kind === "income" ? "income" : String(data.get("category")),
     date: String(data.get("date")),
   });
-  saveItems();
+  state.items.unshift(item);
   closeSheet();
   setView("activity");
   render();
+  try {
+    await db.insertItem(item);
+    state.syncError = null;
+    renderSyncStatus();
+  } catch (error) {
+    console.error(error);
+    state.items = state.items.filter((row) => row.id !== item.id);
+    state.syncError = i18n.t("syncSaveError");
+    render();
+  }
 });
 
 window.onLocaleChange = () => {
@@ -346,4 +384,4 @@ window.onLocaleChange = () => {
   render();
 };
 
-render();
+boot();
