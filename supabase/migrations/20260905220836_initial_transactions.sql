@@ -1,6 +1,3 @@
--- Initial schema lives in supabase/migrations/20260905000000_initial_transactions.sql
--- Applied via Supabase GitHub Integration or: SQL Editor → Run this file once.
-
 create table if not exists transactions (
   id text primary key,
   merchant text not null,
@@ -23,5 +20,3 @@ create policy "folio_public_access"
   for all
   using (true)
   with check (true);
-
--- Tighten later: auth + household_id when you add login.

@@ -2,38 +2,29 @@
 
 PWA для семейного учёта финансов. Frontend на GitHub Pages, данные в Supabase.
 
+- **Сайт:** https://e2lock.github.io/Folio/
+- **Репо:** https://github.com/e2lock/Folio
+- **Supabase:** `hachqbmborhqahwcqatr` (eu-central-1)
+
 ## Быстрый старт
 
-### 1. Supabase
+### 1. Supabase (уже настроено)
 
-1. Откройте [Supabase Dashboard](https://supabase.com/dashboard) → ваш проект.
-2. **SQL Editor** → вставьте содержимое `supabase/schema.sql` → **Run**.
-3. **Project Settings → API** — скопируйте:
-   - **Project URL**
-   - **anon public** key
+`config.js` содержит URL и anon key проекта. Схема БД — в `supabase/migrations/`.
 
-### 2. Конфиг
+### 2. GitHub ↔ Supabase Integration
 
-Отредактируйте `config.js`:
+Подключение репозитория к проекту Supabase (миграции деплоятся автоматически):
 
-```js
-window.FOLIO_CONFIG = {
-  supabaseUrl: "https://xxxxx.supabase.co",
-  supabaseAnonKey: "eyJ...",
-};
-```
+1. Откройте [Integrations → GitHub](https://supabase.com/dashboard/project/hachqbmborhqahwcqatr/settings/integrations)
+2. **Authorize GitHub** → выберите репозиторий **e2lock/Folio**
+3. **Working directory:** `.` (корень репо, папка `supabase/` здесь)
+4. Включите **Deploy to production** (push/merge в `main` → применяются миграции)
+5. **Enable integration**
 
-Закоммитьте и запушьте:
-
-```powershell
-git add config.js
-git commit -m "Add Supabase config"
-git push
-```
+После push в `main` Supabase применит новые файлы из `supabase/migrations/`.
 
 ### 3. GitHub Pages
-
-Сайт: **https://e2lock.github.io/Folio/**
 
 Settings → Pages → branch `main`, folder `/ (root)`.
 
@@ -51,6 +42,8 @@ powershell -ExecutionPolicy Bypass -File .\serve.ps1
 |------|------------|
 | `config.js` | URL и anon key Supabase |
 | `db.js` | Загрузка и сохранение операций |
-| `supabase/schema.sql` | Схема таблицы `transactions` |
+| `supabase/config.toml` | Конфиг для GitHub Integration |
+| `supabase/migrations/` | Миграции БД (деплой через GitHub) |
+| `supabase/schema.sql` | Справочная копия схемы |
 
 **Не публикуйте** `service_role` key — только `anon` key в `config.js`.

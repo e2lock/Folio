@@ -1,0 +1,30 @@
+# Folio — Supabase GitHub Integration
+# Working directory for dashboard: . (repo root)
+
+project_id = "folio"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "https://e2lock.github.io/Folio/"
+additional_redirect_urls = ["https://e2lock.github.io/Folio/", "http://127.0.0.1:5173/"]
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
