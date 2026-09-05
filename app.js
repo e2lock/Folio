@@ -38,7 +38,7 @@ function isCurrentMonth(ym) {
   return ym === thisMonth();
 }
 
-const MONTH_PREFS_KEY = "folio-month-prefs-v1";
+const MONTH_PREFS_STORAGE = "folio-month-prefs-v1";
 
 function isValidMonth(ym) {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(ym || ""));
@@ -46,7 +46,7 @@ function isValidMonth(ym) {
 
 function loadMonthPrefs() {
   try {
-    const raw = localStorage.getItem(MONTH_PREFS_KEY);
+    const raw = localStorage.getItem(MONTH_PREFS_STORAGE);
     if (!raw) return { selectedMonth: thisMonth(), activityMonthOnly: false };
     const parsed = JSON.parse(raw);
     return {
@@ -61,7 +61,7 @@ function loadMonthPrefs() {
 function persistMonthPrefs() {
   try {
     localStorage.setItem(
-      MONTH_PREFS_KEY,
+      MONTH_PREFS_STORAGE,
       JSON.stringify({
         selectedMonth: state.selectedMonth,
         activityMonthOnly: state.activityMonthOnly,

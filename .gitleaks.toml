@@ -4,8 +4,11 @@ title = "Folio"
 useDefault = true
 
 [allowlist]
-description = "Public Supabase anon key is required for GitHub Pages. RLS is the access control."
+description = "Public anon key and non-secret localStorage ids."
 paths = [
   '''(^|/)config\.js$''',
   '''(^|/)config\.example\.js$''',
+]
+regexes = [
+  '''folio-month-prefs-v1''',
 ]
