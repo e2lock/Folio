@@ -3,7 +3,7 @@ const LOCALE_KEY = "folio-locale-v1";
 const MESSAGES = {
   ru: {
     appTitle: "Folio — личный учёт",
-    brandSubtitle: "Журнал за сентябрь",
+    brandSubtitle: "Журнал за {month}",
     railFoot: "Журнал только для двоих. Без входа данные закрыты.",
     navOverview: "Обзор",
     navActivity: "Операции",
@@ -54,6 +54,10 @@ const MESSAGES = {
     langRu: "RU",
     langEn: "EN",
     languageGroup: "Язык",
+    monthSwitchLabel: "Выбор месяца",
+    previousMonth: "Предыдущий месяц",
+    nextMonth: "Следующий месяц",
+    onlySelectedMonth: "Только этот месяц",
     authTitle: "Вход в Folio",
     signUpTitle: "Создать аккаунт",
     authCopy: "Два аккаунта, один журнал. Без входа чужие данные недоступны.",
@@ -91,7 +95,7 @@ const MESSAGES = {
   },
   en: {
     appTitle: "Folio — personal ledger",
-    brandSubtitle: "September ledger",
+    brandSubtitle: "Ledger for {month}",
     railFoot: "A private ledger for two. Sign in to see any data.",
     navOverview: "Overview",
     navActivity: "Activity",
@@ -142,6 +146,10 @@ const MESSAGES = {
     langRu: "RU",
     langEn: "EN",
     languageGroup: "Language",
+    monthSwitchLabel: "Month selector",
+    previousMonth: "Previous month",
+    nextMonth: "Next month",
+    onlySelectedMonth: "Only this month",
     authTitle: "Sign in to Folio",
     signUpTitle: "Create an account",
     authCopy: "Two accounts, one ledger. Nothing is readable without a login.",
@@ -270,6 +278,14 @@ function formatShortDate(iso) {
   });
 }
 
+function formatMonthYear(ym) {
+  const [year, month] = ym.split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
 function formatWeekdayNarrow(date) {
   return date.toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US", { weekday: "narrow" });
 }
@@ -339,6 +355,7 @@ window.i18n = {
   normalizeCategory,
   formatMoney,
   formatShortDate,
+  formatMonthYear,
   formatWeekdayNarrow,
   greetingForHour,
   applyI18n,

@@ -82,6 +82,29 @@ p {
   align-items: center;
 }
 
+.month-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+}
+
+.month-switch strong {
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+
+.month-nav {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+}
+
 .brand p,
 .eyebrow,
 .label,
@@ -478,6 +501,19 @@ p {
   margin-bottom: 18px;
 }
 
+.month-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.month-filter input {
+  width: auto;
+  accent-color: var(--green);
+}
+
 .search input,
 form input,
 form select {
@@ -643,13 +679,17 @@ form label {
   .rail {
     border-right: 0;
     border-bottom: 1px solid var(--line);
-    flex-direction: row;
-    align-items: center;
-    gap: 18px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
   }
 
   .nav {
     flex-direction: row;
+  }
+
+  .month-switch {
+    justify-content: space-between;
   }
 
   .rail-foot {
@@ -657,7 +697,7 @@ form label {
   }
 
   .locale-switch {
-    margin-left: auto;
+    margin-left: 0;
   }
 
   .stage {

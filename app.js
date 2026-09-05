@@ -2,6 +2,8 @@ const state = {
   view: "overview",
   query: "",
   category: "all",
+  selectedMonth: thisMonth(),
+  activityMonthOnly: false,
   items: [],
   loading: true,
   syncError: null,
@@ -26,13 +28,23 @@ function thisMonth() {
   return isoLocal(new Date()).slice(0, 7);
 }
 
+function shiftMonth(ym, delta) {
+  const [year, month] = ym.split("-").map(Number);
+  const next = new Date(year, month - 1 + delta, 1);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function isCurrentMonth(ym) {
+  return ym === thisMonth();
+}
+
 function signed(item) {
   return item.kind === "income" ? item.amount : -item.amount;
 }
 
 function totals() {
   const balance = state.items.reduce((sum, item) => sum + signed(item), 0);
-  const monthItems = state.items.filter((item) => monthKey(item.date) === thisMonth());
+  const monthItems = state.items.filter((item) => monthKey(item.date) === state.selectedMonth);
   const income = monthItems.filter((i) => i.kind === "income").reduce((s, i) => s + i.amount, 0);
   const spend = monthItems.filter((i) => i.kind === "expense").reduce((s, i) => s + i.amount, 0);
   return { balance, income, spend, monthItems };
@@ -63,7 +75,8 @@ function isoLocal(d) {
 
 function lastSeven() {
   const days = [];
-  const anchor = new Date();
+  const [year, month] = state.selectedMonth.split("-").map(Number);
+  const anchor = isCurrentMonth(state.selectedMonth) ? new Date() : new Date(year, month, 0);
   for (let i = 6; i >= 0; i -= 1) {
     const d = new Date(anchor);
     d.setDate(d.getDate() - i);
@@ -87,9 +100,22 @@ function filteredItems() {
       const hay = `${item.merchant} ${item.note} ${categoryLabel}`.toLowerCase();
       const q = state.query.toLowerCase().trim();
       const catOk = state.category === "all" || item.category === state.category;
-      return catOk && (!q || hay.includes(q));
+      const monthOk = !state.activityMonthOnly || monthKey(item.date) === state.selectedMonth;
+      return catOk && monthOk && (!q || hay.includes(q));
     })
     .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+}
+
+function renderMonthChrome() {
+  const monthText = i18n.formatMonthYear(state.selectedMonth);
+  const subtitle = document.getElementById("brand-subtitle");
+  if (subtitle) subtitle.textContent = i18n.t("brandSubtitle", { month: monthText });
+
+  const label = document.getElementById("selected-month");
+  if (label) label.textContent = monthText;
+
+  const monthOnly = document.getElementById("month-only");
+  if (monthOnly) monthOnly.checked = state.activityMonthOnly;
 }
 
 function setView(view) {
@@ -306,6 +332,7 @@ function renderChips() {
 function render() {
   renderGate();
   renderSyncStatus();
+  renderMonthChrome();
   const { balance, income, spend } = totals();
   document.getElementById("balance-figure").textContent = i18n.formatMoney(balance);
   document.getElementById("income-figure").textContent = i18n.formatMoney(income);
@@ -405,6 +432,16 @@ document.querySelectorAll("[data-locale]").forEach((btn) => {
   btn.addEventListener("click", () => i18n.setLocale(btn.dataset.locale));
 });
 
+document.getElementById("month-prev").addEventListener("click", () => {
+  state.selectedMonth = shiftMonth(state.selectedMonth, -1);
+  render();
+});
+
+document.getElementById("month-next").addEventListener("click", () => {
+  state.selectedMonth = shiftMonth(state.selectedMonth, 1);
+  render();
+});
+
 document.getElementById("legend").addEventListener("click", (event) => {
   const btn = event.target.closest("[data-cat]");
   if (!btn) return;
@@ -415,6 +452,11 @@ document.getElementById("legend").addEventListener("click", (event) => {
 
 document.getElementById("search").addEventListener("input", (event) => {
   state.query = event.target.value;
+  renderLists();
+});
+
+document.getElementById("month-only").addEventListener("change", (event) => {
+  state.activityMonthOnly = event.target.checked;
   renderLists();
 });
 

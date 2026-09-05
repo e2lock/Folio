@@ -19,8 +19,13 @@
           <span class="mark" aria-hidden="true"></span>
           <div>
             <strong>Folio</strong>
-            <p data-i18n="brandSubtitle">Журнал за сентябрь</p>
+            <p id="brand-subtitle">Журнал за сентябрь</p>
           </div>
+        </div>
+        <div class="month-switch" role="group" data-i18n-aria="monthSwitchLabel" aria-label="Выбор месяца">
+          <button class="ghost month-nav" id="month-prev" type="button" data-i18n-aria="previousMonth" aria-label="Предыдущий месяц">‹</button>
+          <strong id="selected-month">Сентябрь 2026</strong>
+          <button class="ghost month-nav" id="month-next" type="button" data-i18n-aria="nextMonth" aria-label="Следующий месяц">›</button>
         </div>
         <nav class="nav">
           <button class="nav-btn is-active" data-view="overview" type="button" data-i18n="navOverview">Обзор</button>
@@ -115,6 +120,10 @@
             <label class="search">
               <span class="sr-only" data-i18n="searchLabel">Поиск по месту или заметке</span>
               <input id="search" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="Поиск по месту или заметке" />
+            </label>
+            <label class="month-filter">
+              <input id="month-only" type="checkbox" />
+              <span data-i18n="onlySelectedMonth">Только этот месяц</span>
             </label>
             <div class="chips" id="chips"></div>
           </div>
