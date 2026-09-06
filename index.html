@@ -140,7 +140,7 @@
               <button class="primary" id="open-compose" type="button" data-i18n="addEntry">Добавить запись</button>
             </div>
           </header>
-          <input id="import-file" type="file" accept=".xlsx,.xls,.csv" hidden />
+          <input id="import-file" type="file" accept=".xlsx,.xls,.csv,.pdf" hidden />
 
           <div class="toolbar">
             <label class="search">
@@ -258,10 +258,10 @@
           <h2 id="import-sheet-title" data-i18n="importTitle">Импорт выписки</h2>
           <button class="icon-btn" id="close-import-sheet" type="button" data-i18n-aria="close" aria-label="Закрыть">×</button>
         </header>
-        <p class="import-hint" data-i18n="importHint">Поддерживается выписка Альфа-Банка. Внутренние переводы между своими счетами по умолчанию не импортируются.</p>
+        <p class="import-hint" data-i18n="importHint">Поддерживаются выписки Альфа-Банка (.xlsx) и СберБанка (.pdf). Переводы между своими счетами импортируются — они нужны для правильного сальдо.</p>
         <p class="sync-status" id="import-status" hidden></p>
         <div class="import-toolbar">
-          <button class="ghost" id="import-pick" type="button" data-i18n="importChoose">Выберите файл Excel (.xlsx) из банка</button>
+          <button class="ghost" id="import-pick" type="button" data-i18n="importChoose">Выберите файл выписки (.xlsx, .pdf)</button>
           <button class="text-btn" id="import-select-all" type="button" hidden data-i18n="importSelectAll">Выбрать все новые</button>
           <button class="text-btn" id="import-clear-all" type="button" hidden data-i18n="importClearAll">Снять выбор</button>
         </div>
@@ -285,6 +285,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
     <script src="i18n.js"></script>

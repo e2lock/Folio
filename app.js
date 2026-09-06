@@ -694,14 +694,17 @@ function renderImportSheet() {
       summary.hidden = false;
       const from = preview.stats.dateFrom ? i18n.formatShortDate(preview.stats.dateFrom) : "—";
       const to = preview.stats.dateTo ? i18n.formatShortDate(preview.stats.dateTo) : "—";
-      const parts = [
+      const parts = [];
+      if (preview.bank === "sber") parts.push(i18n.t("bankSber"));
+      else if (preview.bank === "alfa") parts.push(i18n.t("bankAlfa"));
+      parts.push(
         i18n.t("importSummary", {
           selected: preview.stats.selected,
           total: preview.stats.total,
           from,
           to,
-        }),
-      ];
+        })
+      );
       if (preview.stats.duplicates) {
         parts.push(i18n.t("importDuplicates", { count: preview.stats.duplicates }));
       }
