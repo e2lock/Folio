@@ -21,15 +21,20 @@
   </head>
   <body>
     <div class="app">
-      <aside class="rail">
-        <div class="brand">
-          <span class="mark" aria-hidden="true"></span>
-          <div class="brand-copy">
-            <strong>Folio</strong>
-            <p id="brand-subtitle">Журнал за сентябрь</p>
-          </div>
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <button class="burger-btn" id="burger-toggle" type="button" data-i18n-aria="ariaMenu" aria-label="Главное меню" aria-expanded="false">
+            <span class="burger-lines" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+            <span class="mark" aria-hidden="true"></span>
+            <strong class="topbar-logo-text">Folio</strong>
+          </button>
         </div>
-        <div class="month-block">
+
+        <div class="topbar-center">
           <div class="month-switch" role="group" data-i18n-aria="monthSwitchLabel" aria-label="Выбор месяца">
             <button class="ghost month-nav" id="month-prev" type="button" data-i18n-aria="previousMonth" aria-label="Предыдущий месяц">‹</button>
             <strong id="selected-month">Сентябрь 2026</strong>
@@ -37,14 +42,41 @@
           </div>
           <button class="text-btn month-now" id="month-now" type="button" data-i18n="currentMonth" data-i18n-aria="goToCurrentMonth" aria-label="Текущий месяц">Текущий месяц</button>
         </div>
-        <div class="journal-block" id="journal-block" hidden>
-          <p class="journal-label" data-i18n="journalLabel">Журнал</p>
-          <div class="journal-switch" id="journal-switch" role="group" data-i18n-aria="journalLabel" aria-label="Журнал"></div>
+
+        <div class="topbar-right">
+          <nav class="topbar-nav" aria-label="Навигация">
+            <button class="nav-btn is-active" data-view="overview" type="button" data-i18n="navOverview">Обзор</button>
+            <button class="nav-btn" data-view="planner" type="button" data-i18n="navPlanner">Планировщик</button>
+            <button class="nav-btn" data-view="activity" type="button" data-i18n="navActivity">Операции</button>
+          </nav>
         </div>
+      </header>
+
+      <div class="menu-backdrop" id="menu-backdrop" hidden></div>
+
+      <aside class="rail" id="app-drawer">
+        <div class="brand">
+          <span class="mark" aria-hidden="true"></span>
+          <div class="brand-copy">
+            <strong>Folio</strong>
+            <p id="brand-subtitle">Журнал за сентябрь</p>
+          </div>
+          <button class="icon-btn drawer-close" id="drawer-close" type="button" data-i18n-aria="ariaCloseMenu" aria-label="Закрыть меню">×</button>
+        </div>
+
+        <div class="journal-block" id="journal-block" hidden>
+          <label class="journal-label" for="journal-select" data-i18n="journalLabel">Журнал</label>
+          <div class="journal-dropdown-wrap">
+            <select id="journal-select" class="journal-select" data-i18n-aria="journalLabel" aria-label="Журнал"></select>
+          </div>
+        </div>
+
         <nav class="nav">
           <button class="nav-btn is-active" data-view="overview" type="button" data-i18n="navOverview">Обзор</button>
+          <button class="nav-btn" data-view="planner" type="button" data-i18n="navPlanner">Планировщик</button>
           <button class="nav-btn" data-view="activity" type="button" data-i18n="navActivity">Операции</button>
         </nav>
+
         <div class="rail-foot">
           <p id="session-email" class="session-email" hidden></p>
           <button class="text-btn" id="change-password" type="button" hidden data-i18n="changePassword">Сменить пароль</button>
@@ -69,6 +101,21 @@
               <p class="label" data-i18n="availableBalance">Сальдо журнала</p>
               <p class="balance" id="balance-figure">0 ₽</p>
               <p class="balance-hint" data-i18n="balanceHint">Доходы минус расходы по всем записям. Не остаток на счёте и не учитывает долг по кредитке.</p>
+              
+              <!-- Планируемый остаток и будущие списания в главном блоке -->
+              <div class="hero-planner-preview" id="hero-planner-preview">
+                <div class="planner-mini-row">
+                  <div class="mini-col">
+                    <span class="label" data-i18n="upcomingExpensesCard">Грядущие расходы</span>
+                    <strong class="mini-val danger" id="hero-upcoming-figure">0 ₽</strong>
+                  </div>
+                  <div class="mini-col">
+                    <span class="label" data-i18n="projectedRemainderCard">Итоговый остаток</span>
+                    <strong class="mini-val" id="hero-projected-figure">0 ₽</strong>
+                  </div>
+                </div>
+              </div>
+
               <div class="split">
                 <div>
                   <span class="dot income"></span>
@@ -125,6 +172,76 @@
               </div>
             </div>
             <div class="insights-grid" id="insights-grid"></div>
+          </article>
+        </section>
+
+        <section id="view-planner" class="view" hidden data-i18n-aria="ariaPlanner" aria-label="Планировщик">
+          <header class="page-head">
+            <div>
+              <p class="eyebrow" data-i18n="navPlanner">Планировщик</p>
+              <h1 data-i18n="plannerTitle">Планировщик бюджета</h1>
+            </div>
+            <div class="page-head-actions">
+              <button class="primary" id="open-plan-compose" type="button" data-i18n="addPlannedItem">Запланировать трату / доход</button>
+            </div>
+          </header>
+
+          <!-- Сводка планировщика: текущий счет, грядущие расходы, остаток -->
+          <div class="planner-summary-grid">
+            <article class="card planner-card current-balance-box">
+              <p class="label" data-i18n="currentBalanceCard">Текущий баланс</p>
+              <p class="metric" id="plan-current-balance">0 ₽</p>
+              <p class="hint">Фактический остаток в журнале</p>
+            </article>
+
+            <article class="card planner-card upcoming-box">
+              <p class="label" data-i18n="upcomingExpensesCard">Грядущие расходы</p>
+              <p class="metric danger" id="plan-upcoming-expenses">0 ₽</p>
+              <p class="hint" id="plan-upcoming-count">0 запланированных списаний</p>
+            </article>
+
+            <article class="card planner-card expected-income-box">
+              <p class="label" data-i18n="expectedIncomeCard">Ожидаемые поступления</p>
+              <p class="metric success" id="plan-expected-income">0 ₽</p>
+              <p class="hint" id="plan-income-count">0 запланированных доходов</p>
+            </article>
+
+            <article class="card planner-card projected-box">
+              <p class="label" data-i18n="projectedRemainderCard">Итоговый остаток</p>
+              <p class="metric bold" id="plan-projected-remainder">0 ₽</p>
+              <p class="hint" id="plan-runway-badge" data-i18n="projectedRemainderHint">Сколько останется после всех расходов</p>
+            </article>
+          </div>
+
+          <!-- Рекомендации и советы по сокращению расходов -->
+          <article class="card tips-card">
+            <div class="card-head">
+              <div>
+                <h2 data-i18n="savingsTipsTitle">Где можно сократить расходы</h2>
+                <p class="hint" data-i18n="savingsTipsHint">Умные рекомендации на основе истории ваших трат</p>
+              </div>
+            </div>
+            <div class="tips-list" id="planner-tips-list"></div>
+          </article>
+
+          <!-- Самые частые траты (топ по повторяемости) -->
+          <article class="card frequent-card">
+            <div class="card-head">
+              <div>
+                <h2 data-i18n="frequentExpensesTitle">Самые частые траты</h2>
+                <p class="hint" data-i18n="frequentExpensesHint">Где вы расплачиваетесь регулярнее всего (по числу операций)</p>
+              </div>
+            </div>
+            <ul class="frequent-list" id="frequent-expenses-list"></ul>
+          </article>
+
+          <!-- Список запланированных операций -->
+          <article class="card">
+            <div class="card-head">
+              <h2 data-i18n="upcomingListTitle">Запланированные операции</h2>
+            </div>
+            <ul class="tx-list" id="planned-items-list"></ul>
+            <p class="empty" id="no-planned-state" data-i18n="noPlannedItems">Пока нет запланированных расходов. Добавьте обязательные платежи до конца месяца.</p>
           </article>
         </section>
 
@@ -240,14 +357,65 @@
           <div class="form-row">
             <label>
               <span data-i18n="category">Категория</span>
-              <select name="category"></select>
+              <select name="category" id="compose-category"></select>
             </label>
             <label>
-              <span data-i18n="date">Дата</span>
-              <input name="date" type="date" required />
+              <span data-i18n="subcategoriesLabel">Подкатегория</span>
+              <select name="subcategory" id="compose-subcategory">
+                <option value="">—</option>
+              </select>
             </label>
           </div>
+          <label>
+            <span data-i18n="date">Дата</span>
+            <input name="date" type="date" required />
+          </label>
           <button class="primary wide" type="submit" data-i18n="saveEntry">Сохранить</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="sheet" id="plan-sheet" hidden>
+      <div class="sheet-panel" role="dialog" aria-labelledby="plan-title">
+        <header class="sheet-head">
+          <h2 id="plan-title" data-i18n="addPlannedItem">Запланировать трату / доход</h2>
+          <button class="icon-btn" id="close-plan" type="button" data-i18n-aria="close" aria-label="Закрыть">×</button>
+        </header>
+        <form id="plan-form">
+          <label>
+            <span data-i18n="plannedName">Название или контрагент</span>
+            <input name="name" required maxlength="48" data-i18n-placeholder="plannedNamePlaceholder" placeholder="Аренда, интернет, подписка..." />
+          </label>
+          <div class="form-row">
+            <label>
+              <span data-i18n="plannedAmount">Сумма</span>
+              <input name="amount" type="number" step="0.01" min="0.01" required data-i18n-placeholder="plannedAmountPlaceholder" placeholder="5000" />
+            </label>
+            <label>
+              <span data-i18n="plannedType">Тип</span>
+              <select name="kind">
+                <option value="expense">Расход (списание)</option>
+                <option value="income">Доход (поступление)</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-row">
+            <label>
+              <span data-i18n="plannedCategory">Категория</span>
+              <select name="category" id="plan-category"></select>
+            </label>
+            <label>
+              <span data-i18n="plannedSubcategory">Подкатегория</span>
+              <select name="subcategory" id="plan-subcategory">
+                <option value="">—</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            <span data-i18n="plannedDate">Срок или дата</span>
+            <input name="date" type="date" required />
+          </label>
+          <button class="primary wide" type="submit" data-i18n="savePlanned">Добавить в план</button>
         </form>
       </div>
     </div>

@@ -4,8 +4,14 @@ const MESSAGES = {
     railFoot: "Два журнала: Егор и Надежда. Данные только после входа.",
     navOverview: "Обзор",
     navActivity: "Операции",
+    navPlanner: "Планировщик",
     ariaOverview: "Обзор",
     ariaActivity: "Операции",
+    ariaPlanner: "Планировщик",
+    ariaMenu: "Главное меню",
+    ariaCloseMenu: "Закрыть меню",
+    menuTitle: "Меню",
+    openMenu: "Меню",
     greetingMorning: "Доброе утро",
     greetingAfternoon: "Добрый день",
     greetingEvening: "Добрый вечер",
@@ -98,6 +104,45 @@ const MESSAGES = {
     insightsAtmHint: "Снято в банкоматах: {amount} ({count} раз)",
     insightsNoData: "Недостаточно данных для анализа за этот месяц.",
     insightsViewTx: "Найти в операциях",
+
+    /* Планировщик и аналитика бюджета */
+    plannerTitle: "Планировщик бюджета",
+    plannerSubtitle: "Контроль текущего баланса, ожидаемых доходов и будущих списаний",
+    currentBalanceCard: "Текущий баланс",
+    upcomingExpensesCard: "Грядущие расходы",
+    expectedIncomeCard: "Ожидаемые поступления",
+    projectedRemainderCard: "Итоговый остаток",
+    projectedRemainderHint: "Сколько останется от текущего счёта после всех плановых списаний и поступлений",
+    savingsTipsTitle: "Где можно сократить расходы",
+    savingsTipsHint: "Умные рекомендации на основе истории ваших трат",
+    frequentExpensesTitle: "Самые частые траты",
+    frequentExpensesHint: "Где вы расплачиваетесь регулярнее всего (по числу операций)",
+    upcomingListTitle: "Запланированные операции",
+    addPlannedItem: "Запланировать трату / доход",
+    plannedName: "Название или контрагент",
+    plannedNamePlaceholder: "Аренда, интернет, подписка...",
+    plannedAmount: "Сумма",
+    plannedAmountPlaceholder: "5000",
+    plannedDate: "Срок или дата",
+    plannedType: "Тип",
+    plannedCategory: "Категория",
+    plannedSubcategory: "Подкатегория",
+    savePlanned: "Добавить в план",
+    removePlanned: "Удалить",
+    markPlannedDone: "Выполнено",
+    noPlannedItems: "Пока нет запланированных расходов. Добавьте обязательные платежи до конца месяца.",
+    subcategoriesLabel: "Подкатегория",
+    allSubcategories: "Все подкатегории",
+    runwayDays: "Хватит на ~{days} дн.",
+    runwaySafe: "Баланс стабилен",
+    runwayWarning: "Риск дефицита к концу месяца",
+    tipSubscriptions: "Подписки и сервисы составляют {amount}. Проверьте автопродления, которыми редко пользуетесь.",
+    tipDeliveryDining: "Доставка и кафе забирают {amount} ({count} раз). Сокращение походов на 20% сэкономит ~{saving}.",
+    tipSmallLeaks: "Мелкие траты до 1 000 ₽ незаметно уносят {amount}. Установите дневной лимит на перекусы и кофе.",
+    tipGroceries: "Продукты и супермаркеты: {amount}. Составление списка перед покупками сохраняет до 15% бюджета.",
+    tipTaxi: "Поездки на такси и самокатах: {amount}. Для коротких дистанций можно чаще выбирать метро/пешком.",
+    tipHealthyBudget: "Траты распределены сбалансированно, критических перекосов не обнаружено.",
+
     authTitle: "Folio",
     signUpTitle: "Новый аккаунт",
     authCopy: "",
@@ -158,6 +203,98 @@ const CATEGORY_COLORS = {
 };
 
 const CATEGORY_IDS = Object.keys(CATEGORY_COLORS);
+
+const SUBCATEGORIES = {
+  groceries: [
+    { id: "supermarket", label: "Супермаркеты и гипермаркеты" },
+    { id: "delivery_food", label: "Быстрая доставка (Самокат, Лавка)" },
+    { id: "specialty_food", label: "Специализированные (ВкусВилл, фермерские)" },
+    { id: "beverages_alcohol", label: "Напитки и винмаркеты" },
+  ],
+  dining: [
+    { id: "cafes_coffee", label: "Кофейни и пекарни" },
+    { id: "fastfood", label: "Фастфуд и бургерные" },
+    { id: "restaurants_bars", label: "Рестораны и бары" },
+    { id: "business_lunch", label: "Обеды и столовые" },
+  ],
+  transit: [
+    { id: "taxi", label: "Такси (Yandex Go и др.)" },
+    { id: "public_transport", label: "Метро, автобусы, троллейбусы" },
+    { id: "suburban_trains", label: "Электрички и пригородные поезда" },
+    { id: "kicksharing", label: "Кикшеринг (Самокаты)" },
+    { id: "carsharing_gas", label: "Каршеринг и АЗС" },
+  ],
+  communications: [
+    { id: "mobile_phone", label: "Мобильная связь (Билайн, МТС, Мегафон)" },
+    { id: "home_internet_tv", label: "Домашний интернет и ТВ (Ростелеком)" },
+    { id: "hosting_domains", label: "Хостинг и доменные имена" },
+  ],
+  utilities: [
+    { id: "housing_maintenance", label: "ЖКХ, квартплата, ЕИРЦ" },
+    { id: "electricity_gas", label: "Электроэнергия и газ" },
+    { id: "intercom_security", label: "Домофон, охрана, консьерж" },
+  ],
+  services: [
+    { id: "digital_subs", label: "Цифровые подписки и стриминг" },
+    { id: "banking_fees", label: "Банковские комиссии и уведомления" },
+    { id: "household_repairs", label: "Бытовые услуги, химчистка, ремонт" },
+    { id: "beauty_hair", label: "Парикмахерские и барбершопы" },
+  ],
+  shopping: [
+    { id: "marketplaces", label: "Маркетплейсы (Ozon, Wildberries)" },
+    { id: "clothing_shoes", label: "Одежда и обувь" },
+    { id: "electronics_gadgets", label: "Электроника и техника" },
+    { id: "home_goods", label: "Товары для дома и уюта" },
+  ],
+  health: [
+    { id: "pharmacy", label: "Аптеки и лекарства" },
+    { id: "clinics_dentistry", label: "Клиники, анализы, стоматология" },
+    { id: "optics_fitness", label: "Оптика, спорт, витамины" },
+  ],
+  travel: [
+    { id: "train_tickets", label: "Поезда и ЖД билеты (РЖД)" },
+    { id: "air_tickets", label: "Авиабилеты" },
+    { id: "hotels_tours", label: "Отели, бронирования, туры" },
+  ],
+  cash: [
+    { id: "atm_withdrawal", label: "Снятие в банкомате" },
+    { id: "cash_deposit", label: "Внесение наличных" },
+  ],
+  transfers: [
+    { id: "sbp_transfer", label: "Переводы через СБП" },
+    { id: "card_to_card", label: "Переводы по карте / внутри банка" },
+    { id: "internal_accounts", label: "Между своими счетами" },
+  ],
+  rent: [
+    { id: "apartment_rent", label: "Аренда квартиры / жилья" },
+    { id: "parking_storage", label: "Паркинг или кладовка" },
+  ],
+  income: [
+    { id: "salary", label: "Заработная плата и аванс" },
+    { id: "freelance_business", label: "Фриланс / гонорары / бизнес" },
+    { id: "cashback_interest", label: "Кэшбэк и проценты по остатку" },
+    { id: "refunds", label: "Возвраты покупок" },
+    { id: "other_income", label: "Прочие поступления" },
+  ],
+  other: [
+    { id: "misc_spend", label: "Разные мелкие расходы" },
+    { id: "uncategorized", label: "Без точной категории" },
+  ],
+};
+
+function subcategoryLabel(catId, subId) {
+  if (!subId) return "";
+  const list = SUBCATEGORIES[catId];
+  if (list) {
+    const found = list.find((s) => s.id === subId);
+    if (found) return found.label;
+  }
+  for (const cat of Object.keys(SUBCATEGORIES)) {
+    const found = SUBCATEGORIES[cat].find((s) => s.id === subId);
+    if (found) return found.label;
+  }
+  return subId;
+}
 
 const LEGACY_CATEGORY_MAP = {
   All: "all",
@@ -260,25 +397,27 @@ function applyI18n() {
   const donut = document.getElementById("donut");
   if (donut) donut.setAttribute("aria-label", t("chartAria"));
 
-  const categorySelect = document.querySelector('select[name="category"]');
-  if (categorySelect) {
-    categorySelect.innerHTML = CATEGORY_IDS.filter((id) => id !== "income")
+  const categorySelects = document.querySelectorAll('select[name="category"]');
+  categorySelects.forEach((sel) => {
+    sel.innerHTML = CATEGORY_IDS.filter((id) => id !== "income")
       .map((id) => `<option value="${id}">${categoryLabel(id)}</option>`)
       .join("");
-  }
+  });
 
-  const kindSelect = document.querySelector('select[name="kind"]');
-  if (kindSelect) {
-    kindSelect.innerHTML = `
+  const kindSelects = document.querySelectorAll('select[name="kind"]');
+  kindSelects.forEach((sel) => {
+    sel.innerHTML = `
       <option value="expense">${t("typeExpense")}</option>
       <option value="income">${t("typeIncome")}</option>`;
-  }
+  });
 
 }
 
 window.i18n = {
   CATEGORY_COLORS,
   CATEGORY_IDS,
+  SUBCATEGORIES,
+  subcategoryLabel,
   t,
   categoryLabel,
   normalizeCategory,

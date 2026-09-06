@@ -5,6 +5,7 @@ const state = {
   selectedMonth: thisMonth(),
   activityMonthOnly: false,
   items: [],
+  plannedItems: [],
   loading: true,
   syncError: null,
   session: null,
@@ -17,12 +18,14 @@ const state = {
   importPreview: null,
   importError: null,
   importBusy: false,
+  drawerOpen: false,
 };
 
 function normalizeItem(item) {
   return {
     ...item,
     category: i18n.normalizeCategory(item.category),
+    subcategory: item.subcategory || null,
   };
 }
 
@@ -164,12 +167,159 @@ function renderMonthChrome() {
   if (nowBtn) nowBtn.disabled = isCurrentMonth(state.selectedMonth);
 }
 
+const PLANNED_STORAGE_KEY = "folio_planned_items_v1";
+
+function loadPlannedItems() {
+  try {
+    const raw = localStorage.getItem(PLANNED_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistPlannedItems() {
+  try {
+    localStorage.setItem(PLANNED_STORAGE_KEY, JSON.stringify(state.plannedItems));
+  } catch {
+    /* ignore */
+  }
+}
+
+state.plannedItems = loadPlannedItems();
+
+function computePlannerMetrics() {
+  const { balance } = totals();
+  const currentMonth = state.selectedMonth;
+
+  const relevantPlanned = state.plannedItems.filter((p) => {
+    if (!p.date) return true;
+    return monthKey(p.date) === currentMonth;
+  });
+
+  const upcomingExpenses = relevantPlanned
+    .filter((p) => p.kind === "expense")
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+  const expectedIncome = relevantPlanned
+    .filter((p) => p.kind === "income")
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+  const projectedRemainder = balance - upcomingExpenses + expectedIncome;
+
+  return {
+    currentBalance: balance,
+    upcomingExpenses,
+    expectedIncome,
+    projectedRemainder,
+    plannedList: relevantPlanned,
+  };
+}
+
+function computeFrequentExpenses(monthItems) {
+  const expenses = monthItems.filter((i) => i.kind === "expense" && i.category !== "transfers");
+  const freqMap = {};
+
+  expenses.forEach((item) => {
+    const key = (item.merchant || "Без названия").trim();
+    if (!freqMap[key]) {
+      freqMap[key] = { merchant: key, count: 0, total: 0, category: item.category };
+    }
+    freqMap[key].count += 1;
+    freqMap[key].total += item.amount;
+  });
+
+  return Object.values(freqMap)
+    .sort((a, b) => b.count - a.count || b.total - a.total)
+    .slice(0, 7);
+}
+
+function generateSavingsTips(monthItems) {
+  const expenses = monthItems.filter((i) => i.kind === "expense" && i.category !== "transfers");
+  const total = expenses.reduce((sum, i) => sum + i.amount, 0);
+  const tips = [];
+
+  if (!expenses.length || total <= 0) {
+    return tips;
+  }
+
+  // 1. Кафе и рестораны (dining)
+  const diningItems = expenses.filter((i) => i.category === "dining");
+  const diningTotal = diningItems.reduce((s, i) => s + i.amount, 0);
+  if (diningTotal > 3000 && (diningTotal / total) > 0.15) {
+    const saving = Math.round(diningTotal * 0.2);
+    tips.push({
+      icon: "☕",
+      title: "Кафе и доставка еды",
+      text: i18n.t("tipDeliveryDining", {
+        amount: i18n.formatMoney(diningTotal),
+        count: diningItems.length,
+        saving: i18n.formatMoney(saving),
+      }),
+    });
+  }
+
+  // 2. Мелкие утечки до 1000 руб
+  const smallLeaks = expenses.filter((i) => i.amount <= 1000);
+  const smallLeaksTotal = smallLeaks.reduce((s, i) => s + i.amount, 0);
+  if (smallLeaksTotal > 4000 && smallLeaks.length >= 8) {
+    tips.push({
+      icon: "🪙",
+      title: "Мелкие незаметные траты",
+      text: i18n.t("tipSmallLeaks", { amount: i18n.formatMoney(smallLeaksTotal) }),
+    });
+  }
+
+  // 3. Подписки и цифровые сервисы (services / communications)
+  const subs = expenses.filter((i) => i.category === "services" || i.category === "communications");
+  const subsTotal = subs.reduce((s, i) => s + i.amount, 0);
+  if (subsTotal > 2000) {
+    tips.push({
+      icon: "📱",
+      title: "Сервисы и подписки",
+      text: i18n.t("tipSubscriptions", { amount: i18n.formatMoney(subsTotal) }),
+    });
+  }
+
+  // 4. Такси и транспорт
+  const transitItems = expenses.filter((i) => i.category === "transit");
+  const transitTotal = transitItems.reduce((s, i) => s + i.amount, 0);
+  if (transitTotal > 2500 && (transitTotal / total) > 0.12) {
+    tips.push({
+      icon: "🚕",
+      title: "Такси и поездки",
+      text: i18n.t("tipTaxi", { amount: i18n.formatMoney(transitTotal) }),
+    });
+  }
+
+  // 5. Продукты (groceries)
+  const groceriesTotal = expenses.filter((i) => i.category === "groceries").reduce((s, i) => s + i.amount, 0);
+  if (groceriesTotal > 10000 && (groceriesTotal / total) > 0.35) {
+    tips.push({
+      icon: "🛒",
+      title: "Супермаркеты",
+      text: i18n.t("tipGroceries", { amount: i18n.formatMoney(groceriesTotal) }),
+    });
+  }
+
+  if (!tips.length) {
+    tips.push({
+      icon: "🌱",
+      title: "Баланс в норме",
+      text: i18n.t("tipHealthyBudget"),
+    });
+  }
+
+  return tips;
+}
+
 function setView(view) {
   state.view = view;
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.classList.toggle("is-active", btn.dataset.view === view);
   });
   document.getElementById("view-overview").hidden = view !== "overview";
+  document.getElementById("view-planner").hidden = view !== "planner";
   document.getElementById("view-activity").hidden = view !== "activity";
 }
 
@@ -192,23 +342,24 @@ function renderPasswordSheet() {
 }
 
 function renderJournalSwitch() {
-  const wrap = document.getElementById("journal-switch");
+  const select = document.getElementById("journal-select");
   const block = document.getElementById("journal-block");
-  if (!wrap || !block) return;
+  if (!select || !block) return;
   const ready = Boolean(state.session && state.household);
   block.hidden = !ready;
   if (!ready) {
-    wrap.replaceChildren();
+    select.replaceChildren();
     return;
   }
-  wrap.replaceChildren();
+  select.replaceChildren();
   state.journals.forEach((journal) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = `nav-btn${journal.id === state.household.id ? " is-active" : ""}`;
-    btn.dataset.journalId = journal.id;
-    btn.textContent = journal.name;
-    wrap.appendChild(btn);
+    const opt = document.createElement("option");
+    opt.value = journal.id;
+    opt.textContent = journal.name;
+    if (journal.id === state.household.id) {
+      opt.selected = true;
+    }
+    select.appendChild(opt);
   });
 }
 
@@ -363,6 +514,8 @@ function rowHtml(item, withRemove) {
   const cls = item.kind === "income" ? "in" : "out";
   const when = i18n.formatShortDate(item.date);
   const category = i18n.categoryLabel(item.category);
+  const subcategory = item.subcategory ? i18n.subcategoryLabel(item.category, item.subcategory) : "";
+  const subMeta = subcategory ? ` (${subcategory})` : "";
   const removeLabel = i18n.t("remove");
   return `
     <li class="tx">
@@ -371,7 +524,7 @@ function rowHtml(item, withRemove) {
       </div>
       <div>
         <p class="who">${item.merchant}</p>
-        <p class="meta">${category} · ${when}${item.note ? ` · ${item.note}` : ""}</p>
+        <p class="meta">${category}${subMeta} · ${when}${item.note ? ` · ${item.note}` : ""}</p>
       </div>
       <p class="amount ${cls}">${formatSignedAmount(item)}</p>
       ${withRemove ? `<button class="remove" data-remove="${item.id}" type="button" aria-label="${removeLabel}">${removeLabel}</button>` : "<span></span>"}
@@ -606,6 +759,113 @@ function renderAnalytics(monthItems) {
   });
 }
 
+function renderPlanner(monthItems) {
+  const metrics = computePlannerMetrics();
+
+  // 1. Обновляем мини-виджет в карточке баланса на Главной (Overview)
+  const heroUpcoming = document.getElementById("hero-upcoming-figure");
+  const heroProjected = document.getElementById("hero-projected-figure");
+  if (heroUpcoming) heroUpcoming.textContent = i18n.formatMoney(metrics.upcomingExpenses);
+  if (heroProjected) heroProjected.textContent = i18n.formatMoney(metrics.projectedRemainder);
+
+  // 2. Сводка страницы Планировщика
+  const curBal = document.getElementById("plan-current-balance");
+  const upExp = document.getElementById("plan-upcoming-expenses");
+  const expInc = document.getElementById("plan-expected-income");
+  const projRem = document.getElementById("plan-projected-remainder");
+  const upCount = document.getElementById("plan-upcoming-count");
+  const incCount = document.getElementById("plan-income-count");
+
+  if (curBal) curBal.textContent = i18n.formatMoney(metrics.currentBalance);
+  if (upExp) upExp.textContent = i18n.formatMoney(metrics.upcomingExpenses);
+  if (expInc) expInc.textContent = i18n.formatMoney(metrics.expectedIncome);
+  if (projRem) {
+    projRem.textContent = i18n.formatMoney(metrics.projectedRemainder);
+    projRem.style.color = metrics.projectedRemainder >= 0 ? "var(--ink)" : "#b85c38";
+  }
+
+  const expItems = metrics.plannedList.filter((p) => p.kind === "expense");
+  const incItems = metrics.plannedList.filter((p) => p.kind === "income");
+  if (upCount) upCount.textContent = `${expItems.length} запланированных списаний`;
+  if (incCount) incCount.textContent = `${incItems.length} запланированных доходов`;
+
+  // 3. Советы по экономии
+  const tipsContainer = document.getElementById("planner-tips-list");
+  if (tipsContainer) {
+    const tips = generateSavingsTips(monthItems);
+    tipsContainer.innerHTML = tips
+      .map(
+        (tip) => `
+        <div class="tip-item">
+          <span class="tip-icon">${tip.icon}</span>
+          <div class="tip-content">
+            <strong>${tip.title}</strong>
+            <p>${tip.text}</p>
+          </div>
+        </div>
+      `
+      )
+      .join("");
+  }
+
+  // 4. Частые траты
+  const freqContainer = document.getElementById("frequent-expenses-list");
+  if (freqContainer) {
+    const frequent = computeFrequentExpenses(monthItems);
+    if (!frequent.length) {
+      freqContainer.innerHTML = `<li class="hint">Нет данных по тратам за выбранный месяц.</li>`;
+    } else {
+      freqContainer.innerHTML = frequent
+        .map(
+          (f) => `
+          <li class="frequent-row">
+            <div class="frequent-info">
+              <span class="frequent-name">${f.merchant}</span>
+              <span class="frequent-meta">${i18n.categoryLabel(f.category)}</span>
+            </div>
+            <div class="frequent-stats">
+              <span class="frequent-count-badge">${f.count} ${f.count === 1 ? "раз" : f.count < 5 ? "раза" : "раз"}</span>
+              <strong class="frequent-total">${i18n.formatMoney(f.total)}</strong>
+            </div>
+          </li>
+        `
+        )
+        .join("");
+    }
+  }
+
+  // 5. Список запланированных операций
+  const plannedListEl = document.getElementById("planned-items-list");
+  const noPlannedEl = document.getElementById("no-planned-state");
+  if (plannedListEl && noPlannedEl) {
+    if (!metrics.plannedList.length) {
+      plannedListEl.replaceChildren();
+      noPlannedEl.hidden = false;
+    } else {
+      noPlannedEl.hidden = true;
+      plannedListEl.innerHTML = metrics.plannedList
+        .map((p) => {
+          const isInc = p.kind === "income";
+          const sub = p.subcategory ? ` (${i18n.subcategoryLabel(p.category, p.subcategory)})` : "";
+          return `
+          <li class="tx">
+            <div class="glyph" style="color:${i18n.CATEGORY_COLORS[p.category] || i18n.CATEGORY_COLORS.other}">
+              ${(p.name || "План").slice(0, 1)}
+            </div>
+            <div>
+              <p class="who">${p.name}</p>
+              <p class="meta">${i18n.categoryLabel(p.category)}${sub} · Срок: ${i18n.formatShortDate(p.date)}</p>
+            </div>
+            <p class="amount ${isInc ? "in" : "out"}">${isInc ? "+" : "−"}${i18n.formatMoney(p.amount)}</p>
+            <button class="remove" data-remove-planned="${p.id}" type="button" aria-label="Удалить">Удалить</button>
+          </li>
+        `;
+        })
+        .join("");
+    }
+  }
+}
+
 function render() {
   renderGate();
   renderSyncStatus();
@@ -627,6 +887,46 @@ function render() {
   renderChips();
   renderLists();
   renderAnalytics(monthItems);
+  renderPlanner(monthItems);
+}
+
+function updateSubcategoryOptions(catSelect, subSelect) {
+  if (!catSelect || !subSelect) return;
+  const cat = catSelect.value;
+  const list = i18n.SUBCATEGORIES[cat] || [];
+  subSelect.innerHTML = `<option value="">—</option>` + list.map((s) => `<option value="${s.id}">${s.label}</option>`).join("");
+}
+
+function openPlanSheet() {
+  const sheet = document.getElementById("plan-sheet");
+  if (!sheet) return;
+  sheet.hidden = false;
+  const form = document.getElementById("plan-form");
+  form.reset();
+  form.elements.date.value = isoLocal(new Date());
+
+  const catSelect = document.getElementById("plan-category");
+  const subSelect = document.getElementById("plan-subcategory");
+  if (catSelect) {
+    catSelect.innerHTML = i18n.CATEGORY_IDS.map((id) => `<option value="${id}">${i18n.categoryLabel(id)}</option>`).join("");
+    updateSubcategoryOptions(catSelect, subSelect);
+  }
+}
+
+function closePlanSheet() {
+  const sheet = document.getElementById("plan-sheet");
+  if (sheet) sheet.hidden = true;
+}
+
+function toggleDrawer(open) {
+  const drawer = document.getElementById("app-drawer");
+  const backdrop = document.getElementById("menu-backdrop");
+  const burger = document.getElementById("burger-toggle");
+  state.drawerOpen = typeof open === "boolean" ? open : !state.drawerOpen;
+
+  if (drawer) drawer.classList.toggle("is-open", state.drawerOpen);
+  if (backdrop) backdrop.hidden = !state.drawerOpen;
+  if (burger) burger.setAttribute("aria-expanded", String(state.drawerOpen));
 }
 
 function openSheet() {
@@ -635,6 +935,13 @@ function openSheet() {
   const form = document.getElementById("compose-form");
   form.reset();
   form.elements.date.value = isoLocal(new Date());
+
+  const catSelect = document.getElementById("compose-category");
+  const subSelect = document.getElementById("compose-subcategory");
+  if (catSelect && subSelect) {
+    updateSubcategoryOptions(catSelect, subSelect);
+  }
+
   form.elements.merchant.focus();
 }
 
@@ -888,7 +1195,10 @@ async function boot() {
 }
 
 document.querySelectorAll(".nav-btn").forEach((btn) => {
-  btn.addEventListener("click", () => setView(btn.dataset.view));
+  btn.addEventListener("click", () => {
+    setView(btn.dataset.view);
+    toggleDrawer(false);
+  });
 });
 
 document.querySelectorAll("[data-goto]").forEach((btn) => {
@@ -951,10 +1261,83 @@ document.getElementById("full-list").addEventListener("click", async (event) => 
   }
 });
 
+document.getElementById("compose-category")?.addEventListener("change", (event) => {
+  const subSelect = document.getElementById("compose-subcategory");
+  updateSubcategoryOptions(event.target, subSelect);
+});
+
+document.getElementById("plan-category")?.addEventListener("change", (event) => {
+  const subSelect = document.getElementById("plan-subcategory");
+  updateSubcategoryOptions(event.target, subSelect);
+});
+
 document.getElementById("open-compose").addEventListener("click", openSheet);
 document.getElementById("close-compose").addEventListener("click", closeSheet);
 document.getElementById("sheet").addEventListener("click", (event) => {
   if (event.target.id === "sheet") closeSheet();
+});
+
+document.getElementById("open-plan-compose")?.addEventListener("click", openPlanSheet);
+document.getElementById("close-plan")?.addEventListener("click", closePlanSheet);
+document.getElementById("plan-sheet")?.addEventListener("click", (event) => {
+  if (event.target.id === "plan-sheet") closePlanSheet();
+});
+
+document.getElementById("plan-form")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const planned = {
+    id: `plan-${Date.now()}`,
+    name: String(data.get("name") || "").trim(),
+    amount: Number(data.get("amount")),
+    kind: String(data.get("kind")),
+    category: String(data.get("category")),
+    subcategory: String(data.get("subcategory") || ""),
+    date: String(data.get("date")),
+  };
+  state.plannedItems.unshift(planned);
+  persistPlannedItems();
+  closePlanSheet();
+  render();
+});
+
+document.getElementById("planned-items-list")?.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-remove-planned]");
+  if (!btn) return;
+  const id = btn.dataset.removePlanned;
+  state.plannedItems = state.plannedItems.filter((p) => p.id !== id);
+  persistPlannedItems();
+  render();
+});
+
+// Burger menu listeners
+document.getElementById("burger-toggle")?.addEventListener("click", () => {
+  toggleDrawer();
+});
+
+document.getElementById("drawer-close")?.addEventListener("click", () => {
+  toggleDrawer(false);
+});
+
+document.getElementById("menu-backdrop")?.addEventListener("click", () => {
+  toggleDrawer(false);
+});
+
+document.getElementById("journal-select")?.addEventListener("change", async (event) => {
+  const id = event.target.value;
+  if (!id || state.loading || id === state.household?.id) return;
+  setBusy(true);
+  try {
+    await db.setActiveHousehold(id);
+    await refreshJournals(id);
+  } catch (error) {
+    console.error(error);
+    state.syncError = authErrorText(error.code || error.message);
+  }
+  setBusy(false);
+  toggleDrawer(false);
+  render();
 });
 
 document.getElementById("compose-form").addEventListener("submit", async (event) => {
@@ -970,6 +1353,7 @@ document.getElementById("compose-form").addEventListener("submit", async (event)
     amount: Number(data.get("amount")),
     kind,
     category: kind === "income" ? "income" : String(data.get("category")),
+    subcategory: String(data.get("subcategory") || ""),
     date: String(data.get("date")),
   });
   state.items.unshift(item);

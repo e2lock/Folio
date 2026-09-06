@@ -131,6 +131,82 @@ function extractMerchant(description, bankCategory) {
   return cellText(bankCategory).slice(0, 48) || text.slice(0, 48);
 }
 
+function detectSubcategory(category, text, merchant, amount) {
+  const hay = `${text || ""} ${merchant || ""}`.toLowerCase();
+  const amt = Number(amount) || 0;
+
+  switch (category) {
+    case "groceries":
+      if (/самокат|samokat|лавка|lavka/i.test(hay)) return "delivery_food";
+      if (/вкусвилл|vkusvill|ферм/i.test(hay)) return "specialty_food";
+      if (/winelab|винлаб|красное.*белое|ароматный мир|градус|пив/i.test(hay)) return "beverages_alcohol";
+      return "supermarket";
+
+    case "dining":
+      if (/coffee|кофе|surf|etlon|цех 85|cekh 85|пекарня|булочная|булка|dodo|додо/i.test(hay)) return "cafes_coffee";
+      if (/бургер|burger|kfc|mcdonald|ростикс|вкусно|шаверма|kebab|кебаб/i.test(hay)) return "fastfood";
+      if (/обед|столовая|ланч|buffet/i.test(hay)) return "business_lunch";
+      return "restaurants_bars";
+
+    case "transit":
+      if (/такси|taxi|yandex.*go|убер|uber/i.test(hay)) return "taxi";
+      if (/whoosh|urent|юрент|самокат/i.test(hay)) return "kicksharing";
+      if (/сзпп|szpp|электрич|пригород/i.test(hay)) return "suburban_trains";
+      if (/каршеринг|ситидрайв|делимобиль|лукойл|газпром|азс|роснефть/i.test(hay)) return "carsharing_gas";
+      return "public_transport";
+
+    case "communications":
+      if (/билайн|beeline|мтс|mts|мегафон|megafon|tele2|т2|мотив/i.test(hay)) return "mobile_phone";
+      if (/ростелеком|rostelecom|дом\.ру|провайдер|интернет|тв/i.test(hay)) return "home_internet_tv";
+      if (/sweb|hosting|хостинг|рег\.ру|reg\.ru|nic\.ru/i.test(hay)) return "hosting_domains";
+      return "mobile_phone";
+
+    case "utilities":
+      if (/электро|сбыт|газ/i.test(hay)) return "electricity_gas";
+      if (/домофон|охрана|шлагбаум/i.test(hay)) return "intercom_security";
+      return "housing_maintenance";
+
+    case "services":
+      if (/плюс|яндекс|plus|подписк|старт|start|кинопоиск|иви|premier|окко|okko|vk|apple|google/i.test(hay)) return "digital_subs";
+      if (/парикмахер|барбер|маникюр|стрижк|салон/i.test(hay)) return "beauty_hair";
+      if (/комиссия|уведомлен|смс/i.test(hay)) return "banking_fees";
+      return "household_repairs";
+
+    case "shopping":
+      if (/wildberries|вайлдберриз|ozon|озон|маркет|алиэкспресс|aliexpress/i.test(hay)) return "marketplaces";
+      if (/одежда|обувь|zara|befree|куртка|платье/i.test(hay)) return "clothing_shoes";
+      if (/dns|м\.видео|эльдорадо|техника|электроник/i.test(hay)) return "electronics_gadgets";
+      return "home_goods";
+
+    case "health":
+      if (/аптек|apteka|36,6|36\.6|планета здоровья|горздрав/i.test(hay)) return "pharmacy";
+      if (/стома|stoma|зуб|клиник|clinic|инвитро|invitro|гемотест|gemotest/i.test(hay)) return "clinics_dentistry";
+      return "optics_fitness";
+
+    case "travel":
+      if (/ржд|rzd|жд|поезд|railway/i.test(hay)) return "train_tickets";
+      if (/авиа|аэрофлот|s7|победа|flight|avia/i.test(hay)) return "air_tickets";
+      return "hotels_tours";
+
+    case "cash":
+      return amt < 0 || hay.includes("внесение") ? "cash_deposit" : "atm_withdrawal";
+
+    case "transfers":
+      if (/между.*счет|своими/i.test(hay)) return "internal_accounts";
+      if (/сбп|sbp/i.test(hay)) return "sbp_transfer";
+      return "card_to_card";
+
+    case "income":
+      if (/зарплат|заработн|аванс/i.test(hay)) return "salary";
+      if (/кэшбэк|cashback|процент/i.test(hay)) return "cashback_interest";
+      if (/возврат/i.test(hay)) return "refunds";
+      return "other_income";
+
+    default:
+      return "misc_spend";
+  }
+}
+
 function categorize(description, bankCategory, kind) {
   if (/alfa lss|банкомат|cash withdrawal|снятие наличных/i.test(cellText(description))) return "cash";
   if (isInternalTransfer(description)) return "transfers";
@@ -248,6 +324,7 @@ function parseSberRows(rows) {
     const amount = Math.abs(signedAmount);
     const merchant = extractSberMerchant(description, bankCategory, false, amount);
     const category = categorizeSber(description, bankCategory, kind, amount);
+    const subcategory = detectSubcategory(category, description, merchant, amount);
     const note = buildSberNote(bankCategory, description, code, false);
 
     items.push({
@@ -256,6 +333,7 @@ function parseSberRows(rows) {
       amount,
       kind,
       category,
+      subcategory,
       date,
       skipDefault: false,
       skipReason: "",
@@ -664,6 +742,7 @@ function parseSberPdfLines(lines) {
     const isInternal = isSberInternalTransfer(fullDesc, headerInfo.categoryRaw, ownerName, ownerInitials);
     const merchant = extractSberMerchant(fullDesc, headerInfo.categoryRaw, isInternal, headerInfo.amount);
     const category = isInternal ? "transfers" : categorizeSber(fullDesc, headerInfo.categoryRaw, headerInfo.kind, headerInfo.amount);
+    const subcategory = detectSubcategory(category, fullDesc, merchant, headerInfo.amount);
     const note = buildSberNote(headerInfo.categoryRaw, fullDesc, authCode, isInternal);
 
     items.push({
@@ -672,6 +751,7 @@ function parseSberPdfLines(lines) {
       amount: headerInfo.amount,
       kind: headerInfo.kind,
       category,
+      subcategory,
       date,
       skipDefault: false,
       skipReason: isInternal ? "importSkipInternal" : "",
@@ -715,6 +795,7 @@ function parseAlfaRows(rows) {
     const amount = Math.abs(signedAmount);
     const merchant = extractMerchant(description, bankCategory);
     const category = categorize(description, bankCategory, kind);
+    const subcategory = detectSubcategory(category, `${description} ${bankCategory}`, merchant, amount);
 
     items.push({
       merchant,
@@ -722,6 +803,7 @@ function parseAlfaRows(rows) {
       amount,
       kind,
       category,
+      subcategory,
       date,
       skipDefault: false,
       skipReason: "",
@@ -750,6 +832,7 @@ function toPreviewRows(parsedItems, existingItems) {
       amount: row.amount,
       kind: row.kind,
       category: row.category,
+      subcategory: row.subcategory || null,
       date: row.date,
     };
     const duplicate = existing.has(itemFingerprint(item));
@@ -821,6 +904,7 @@ const folioImport = {
   extractPdfLines,
   parseSberPdfLines,
   isSberPdf,
+  detectSubcategory,
 
   groupRowsByMonth(rows) {
     const groups = new Map();
