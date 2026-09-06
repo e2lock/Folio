@@ -167,11 +167,11 @@ function renderMonthChrome() {
   if (nowBtn) nowBtn.disabled = isCurrentMonth(state.selectedMonth);
 }
 
-const PLANNED_STORAGE_KEY = "folio_planned_items_v1";
+const PLANNED_STORAGE_KEY = "folio_planned_list";
 
 function loadPlannedItems() {
   try {
-    const raw = localStorage.getItem(PLANNED_STORAGE_KEY);
+    const raw = localStorage.getItem(PLANNED_STORAGE_KEY) || localStorage.getItem("folio_planned_items_v1");
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
