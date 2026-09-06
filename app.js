@@ -404,13 +404,215 @@ function renderChips() {
   });
 }
 
+function computeSpendingInsights(monthItems) {
+  const expenses = monthItems.filter((i) => i.kind === "expense" && i.category !== "transfers");
+  const totalSpend = expenses.reduce((sum, i) => sum + i.amount, 0);
+
+  if (!expenses.length || totalSpend <= 0) {
+    return null;
+  }
+
+  // 1. Дни месяца и темп сгорания (burn rate)
+  const [year, month] = state.selectedMonth.split("-").map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  let elapsedDays = daysInMonth;
+  if (isCurrentMonth(state.selectedMonth)) {
+    const today = new Date();
+    elapsedDays = Math.min(daysInMonth, Math.max(1, today.getDate()));
+  }
+  const burnPerDay = totalSpend / Math.max(1, elapsedDays);
+
+  // 2. Топ пожирателей по торговым точкам/местам
+  const merchantMap = {};
+  expenses.forEach((item) => {
+    const key = (item.merchant || "Операция").trim();
+    if (!merchantMap[key]) {
+      merchantMap[key] = {
+        merchant: key,
+        total: 0,
+        count: 0,
+        category: item.category,
+      };
+    }
+    merchantMap[key].total += item.amount;
+    merchantMap[key].count += 1;
+  });
+
+  const topMerchants = Object.values(merchantMap)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 4)
+    .map((m) => ({
+      ...m,
+      percent: Math.round((m.total / totalSpend) * 100),
+    }));
+
+  // 3. Мелкие частые траты (незаметные утечки до 1000 ₽)
+  const smallTxs = expenses.filter((i) => i.amount > 0 && i.amount <= 1000);
+  const smallTotal = smallTxs.reduce((s, i) => s + i.amount, 0);
+  const smallCount = smallTxs.length;
+  const smallPercent = Math.round((smallTotal / totalSpend) * 100);
+
+  // 4. Подписки и регулярные сервисы (communications, services + ключевые паттерны хостинга/подписок)
+  const recurringTxs = expenses.filter((i) => {
+    if (i.category === "communications" || i.category === "services") return true;
+    const text = `${i.merchant} ${i.note}`.toLowerCase();
+    return /подписк|hosting|sweb|яндекс|apple|google|cloud|тв|tv|интернет/i.test(text);
+  });
+  const recurringTotal = recurringTxs.reduce((s, i) => s + i.amount, 0);
+
+  // 5. Наличные (cash / банкомат)
+  const cashTxs = expenses.filter((i) => i.category === "cash");
+  const cashTotal = cashTxs.reduce((s, i) => s + i.amount, 0);
+  const cashCount = cashTxs.length;
+
+  return {
+    totalSpend,
+    burnPerDay,
+    elapsedDays,
+    topMerchants,
+    smallTotal,
+    smallCount,
+    smallPercent,
+    recurringTotal,
+    recurringCount: recurringTxs.length,
+    cashTotal,
+    cashCount,
+  };
+}
+
+function renderAnalytics(monthItems) {
+  const container = document.getElementById("insights-grid");
+  const subtitle = document.getElementById("analytics-subtitle");
+  if (!container) return;
+
+  const monthText = i18n.formatMonthYear(state.selectedMonth);
+  if (subtitle) {
+    subtitle.textContent = i18n.t("analyticsSubtitle", { month: monthText });
+  }
+
+  const data = computeSpendingInsights(monthItems);
+  if (!data) {
+    container.innerHTML = `<p class="empty">${i18n.t("insightsNoData")}</p>`;
+    return;
+  }
+
+  const items = [];
+
+  // Карточка 1: Темп сгорания
+  items.push(`
+    <div class="insight-tile">
+      <div class="insight-head">
+        <span class="insight-badge burn">⚡</span>
+        <h3>${i18n.t("insightsBurnTitle")}</h3>
+      </div>
+      <p class="insight-val">${i18n.formatMoney(data.burnPerDay)}<span class="unit"> / день</span></p>
+      <p class="insight-desc">${i18n.t("insightsBurnHint")}</p>
+    </div>
+  `);
+
+  // Карточка 2: Мелкие незаметные траты
+  if (data.smallCount > 0) {
+    items.push(`
+      <div class="insight-tile">
+        <div class="insight-head">
+          <span class="insight-badge leak">☕</span>
+          <h3>${i18n.t("insightsSmallLeaksTitle")}</h3>
+        </div>
+        <p class="insight-val">${i18n.formatMoney(data.smallTotal)} <span class="badge-sub">${data.smallPercent}% трат</span></p>
+        <p class="insight-desc">${i18n.t("insightsSmallLeaksHint", { total: i18n.formatMoney(data.smallTotal), count: data.smallCount })}</p>
+      </div>
+    `);
+  }
+
+  // Карточка 3: Наличные
+  if (data.cashTotal > 0) {
+    items.push(`
+      <div class="insight-tile">
+        <div class="insight-head">
+          <span class="insight-badge cash">💵</span>
+          <h3>${i18n.t("insightsAtmTitle")}</h3>
+        </div>
+        <p class="insight-val">${i18n.formatMoney(data.cashTotal)}</p>
+        <p class="insight-desc">${i18n.t("insightsAtmHint", { amount: i18n.formatMoney(data.cashTotal), count: data.cashCount })}</p>
+      </div>
+    `);
+  }
+
+  // Карточка 4: Регулярка / сервисы
+  if (data.recurringTotal > 0) {
+    items.push(`
+      <div class="insight-tile">
+        <div class="insight-head">
+          <span class="insight-badge recurring">🔁</span>
+          <h3>${i18n.t("insightsRecurringTitle")}</h3>
+        </div>
+        <p class="insight-val">${i18n.formatMoney(data.recurringTotal)}</p>
+        <p class="insight-desc">${i18n.t("insightsRecurringHint")}</p>
+      </div>
+    `);
+  }
+
+  // Карточка 5: Топ пожирателей (на всю ширину сетки)
+  if (data.topMerchants.length > 0) {
+    const listHtml = data.topMerchants
+      .map(
+        (m) => `
+        <li class="eater-row">
+          <button type="button" class="eater-btn" data-search-term="${m.merchant}">
+            <div class="eater-info">
+              <span class="eater-name">${m.merchant}</span>
+              <span class="eater-meta">${m.count} ${m.count === 1 ? "операция" : m.count < 5 ? "операции" : "операций"} · ${i18n.categoryLabel(m.category)}</span>
+            </div>
+            <div class="eater-cost">
+              <strong>${i18n.formatMoney(m.total)}</strong>
+              <span class="eater-bar-wrap"><span class="eater-bar" style="width:${Math.max(8, m.percent)}%"></span></span>
+              <span class="eater-pct">${m.percent}%</span>
+            </div>
+          </button>
+        </li>
+      `
+      )
+      .join("");
+
+    items.push(`
+      <div class="insight-tile full-width">
+        <div class="insight-head">
+          <span class="insight-badge top">🔥</span>
+          <h3>${i18n.t("insightsTopEatersTitle")}</h3>
+        </div>
+        <p class="insight-desc">${i18n.t("insightsTopEatersHint")}</p>
+        <ul class="eaters-list">${listHtml}</ul>
+      </div>
+    `);
+  }
+
+  container.innerHTML = items.join("");
+
+  container.querySelectorAll(".eater-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const term = btn.dataset.searchTerm;
+      if (term) {
+        state.query = term;
+        state.activityMonthOnly = true;
+        const searchInput = document.getElementById("search");
+        if (searchInput) searchInput.value = term;
+        const monthOnlyCheckbox = document.getElementById("month-only");
+        if (monthOnlyCheckbox) monthOnlyCheckbox.checked = true;
+        persistMonthPrefs();
+        setView("activity");
+        render();
+      }
+    });
+  });
+}
+
 function render() {
   renderGate();
   renderSyncStatus();
   renderMonthChrome();
   renderPasswordSheet();
   renderImportSheet();
-  const { balance, income, spend } = totals();
+  const { balance, income, spend, monthItems } = totals();
   document.getElementById("balance-figure").textContent = i18n.formatMoney(balance);
   document.getElementById("income-figure").textContent = i18n.formatMoney(income);
   document.getElementById("spend-figure").textContent = i18n.formatMoney(spend);
@@ -424,6 +626,7 @@ function render() {
   renderBars();
   renderChips();
   renderLists();
+  renderAnalytics(monthItems);
 }
 
 function openSheet() {
