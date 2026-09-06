@@ -530,11 +530,81 @@ p {
   white-space: nowrap;
 }
 
-.journal-block {
+.journal-block,
+.accounts-block {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
+}
+
+.accounts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.account-row {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.42);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.account-row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.account-row-head strong {
+  font-size: 0.92rem;
+}
+
+.account-remainder {
+  font-family: Fraunces, Georgia, serif;
+  font-weight: 620;
+  font-size: 0.95rem;
+}
+
+.account-stated {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.account-stated input,
+.account-add-form input,
+.import-account-label select,
+#compose-account {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #fff;
+}
+
+.account-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.import-account-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 14px;
+  font-size: 0.88rem;
 }
 
 .journal-label {
@@ -1427,6 +1497,210 @@ form label {
 }
 
 /* --- Planner Styles --- */
+.wallet-weather {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 20px;
+  padding: 26px 26px 22px;
+  border-radius: 28px;
+  border: 1px solid rgba(27, 24, 20, 0.08);
+  background:
+    radial-gradient(circle at 88% 18%, rgba(196, 165, 116, 0.34), transparent 34%),
+    linear-gradient(135deg, #2f5d3a 0%, #3d5340 42%, #1b1814 100%);
+  color: #f7f1e6;
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.8fr);
+  gap: 22px;
+  align-items: end;
+}
+
+.wallet-weather .eyebrow,
+.wallet-weather .hint,
+.wallet-weather .label {
+  color: rgba(247, 241, 230, 0.68);
+}
+
+.wallet-weather h2 {
+  margin: 6px 0 8px;
+  font-size: clamp(2rem, 4vw, 3rem);
+  letter-spacing: -0.04em;
+  color: #f7f1e6;
+}
+
+.weather-hand {
+  margin: 0 0 8px;
+  font-size: 1.02rem;
+  line-height: 1.45;
+  max-width: 36rem;
+}
+
+.weather-sky {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.weather-orb {
+  position: absolute;
+  top: 18px;
+  right: 28px;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f8e7b4, #c4a574 68%, #8d6a32);
+  box-shadow: 0 0 40px rgba(196, 165, 116, 0.45);
+}
+
+.weather-drift {
+  position: absolute;
+  top: 46px;
+  right: 92px;
+  width: 120px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(247, 241, 230, 0.16);
+  filter: blur(0.2px);
+}
+
+.weather-drift.late {
+  top: 68px;
+  right: 54px;
+  width: 86px;
+  opacity: 0.7;
+}
+
+.wallet-weather[data-weather="haze"] {
+  background:
+    radial-gradient(circle at 80% 10%, rgba(196, 165, 116, 0.28), transparent 36%),
+    linear-gradient(145deg, #5b5346 0%, #3a342c 100%);
+}
+
+.wallet-weather[data-weather="drizzle"] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 40%),
+    linear-gradient(145deg, #3d5348 0%, #24312b 100%);
+}
+
+.wallet-weather[data-weather="drizzle"] .weather-drift,
+.wallet-weather[data-weather="haze"] .weather-drift {
+  background: rgba(247, 241, 230, 0.28);
+}
+
+.wallet-weather[data-weather="wind"] {
+  background: linear-gradient(120deg, #6b4f3a 0%, #2c241c 70%);
+}
+
+.wallet-weather[data-weather="storm"] {
+  background: linear-gradient(160deg, #5a2d22 0%, #1b1814 78%);
+}
+
+.wallet-weather[data-weather="storm"] .weather-orb {
+  background: radial-gradient(circle at 40% 30%, #f3ddd3, #b85c38);
+}
+
+.weather-stats {
+  display: grid;
+  gap: 12px;
+  position: relative;
+}
+
+.weather-stats strong {
+  display: block;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  font-weight: 500;
+}
+
+.portrait-card {
+  margin-bottom: 20px;
+}
+
+.portrait-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 24px;
+  margin-top: 8px;
+}
+
+.weekday-chart {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+  height: 168px;
+  padding-top: 8px;
+}
+
+.weekday-col {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.weekday-bar {
+  width: 100%;
+  max-width: 28px;
+  border-radius: 999px 999px 8px 8px;
+  background: #d7c7a8;
+}
+
+.weekday-col.is-peak .weekday-bar {
+  background: var(--clay);
+}
+
+.weekday-col.is-weekend .weekday-bar {
+  background: #8b6f47;
+}
+
+.weekday-col.is-peak.is-weekend .weekday-bar {
+  background: var(--clay);
+}
+
+.weekday-name {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: lowercase;
+}
+
+.split-panel .label {
+  margin: 14px 0 6px;
+}
+
+.split-panel .label:first-child {
+  margin-top: 0;
+}
+
+.split-meter-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.split-meter-head strong {
+  color: var(--ink);
+  font-size: 0.84rem;
+}
+
+.split-track {
+  height: 8px;
+  margin: 6px 0;
+  border-radius: 999px;
+  background: #e7dcc6;
+  overflow: hidden;
+}
+
+.split-track span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--green), #6b8a62);
+}
+
 .planner-summary-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1439,6 +1713,33 @@ form label {
   flex-direction: column;
   gap: 6px;
   background: var(--card);
+  position: relative;
+  overflow: hidden;
+}
+
+.planner-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.current-balance-box::before {
+  background: var(--green);
+}
+
+.upcoming-box::before {
+  background: var(--clay);
+}
+
+.expected-income-box::before {
+  background: #4c7c59;
+}
+
+.projected-box::before {
+  background: var(--gold);
 }
 
 .planner-card .metric {
@@ -1479,16 +1780,38 @@ form label {
 }
 
 .tip-item {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
   gap: 14px;
+  width: 100%;
   padding: 14px 16px;
-  border-radius: 14px;
+  border-radius: 16px;
   background: #fdfbf7;
   border: 1px solid var(--line);
   font-size: 0.9rem;
   line-height: 1.45;
   color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.tip-item:hover {
+  transform: translateY(-1px);
+  background: #fff;
+  border-color: rgba(27, 24, 20, 0.18);
+}
+
+.tip-save {
+  align-self: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--green);
+  background: var(--green-soft);
+  padding: 5px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
 .tip-icon {
@@ -1518,10 +1841,32 @@ form label {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 10px 14px;
+  width: 100%;
+  padding: 12px 14px;
   background: #fdfbf7;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.frequent-row:hover {
+  background: #fff;
+}
+
+.frequent-bar {
+  display: block;
+  height: 5px;
+  margin-top: 7px;
+  border-radius: 999px;
+  background: #eadcc4;
+  overflow: hidden;
+}
+
+.frequent-bar span {
+  display: block;
+  height: 100%;
+  background: var(--clay);
 }
 
 .frequent-info {
@@ -1604,6 +1949,66 @@ form label {
   font-weight: 600;
   margin: 0;
   color: var(--ink);
+  flex: 1;
+}
+
+.with-help,
+.weather-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.weather-stats .label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.help-mark {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  padding: 0;
+  border: 1px solid rgba(27, 24, 20, 0.18);
+  border-radius: 50%;
+  background: #f7f1e6;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.help-mark:hover,
+.help-mark.is-open {
+  color: var(--ink);
+  border-color: rgba(27, 24, 20, 0.4);
+}
+
+.help-mark.is-on-dark {
+  background: rgba(247, 241, 230, 0.12);
+  border-color: rgba(247, 241, 230, 0.35);
+  color: rgba(247, 241, 230, 0.82);
+}
+
+.help-mark.is-on-dark:hover,
+.help-mark.is-on-dark.is-open {
+  background: rgba(247, 241, 230, 0.22);
+  color: #f7f1e6;
+}
+
+.help-float {
+  position: fixed;
+  z-index: 80;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fffdf8;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: 0 16px 36px rgba(48, 38, 22, 0.16);
+  font-size: 0.84rem;
+  line-height: 1.45;
 }
 
 .insight-badge {
@@ -1635,6 +2040,18 @@ form label {
 
 .insight-badge.top {
   background: #faebd7;
+}
+
+.insight-badge.compare {
+  background: #e8eee6;
+}
+
+.insight-badge.weekend {
+  background: #ece6f2;
+}
+
+.insight-badge.habit {
+  background: #f3e6d4;
 }
 
 .insight-val {
@@ -1760,5 +2177,31 @@ form label {
   width: 32px;
   text-align: right;
   display: inline-block;
+}
+
+@media (max-width: 800px) {
+  .wallet-weather,
+  .portrait-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wallet-weather {
+    padding: 22px 18px 18px;
+  }
+
+  .weather-orb {
+    width: 52px;
+    height: 52px;
+    right: 16px;
+  }
+
+  .tip-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .tip-save {
+    grid-column: 2;
+    justify-self: start;
+  }
 }
 

@@ -37,8 +37,10 @@ const MERCHANT_RULES = [
   [/перевод|sbp|c2c|между счетами|alfa pay/i, "transfers"],
   [/aeroflot|russian railways|rzd/i, "travel"],
   [/sweb\.ru|tb ufo hosting|интернет|телефон|tv|hosting/i, "communications"],
+  [/edarit|едарит/i, "groceries"],
   [/pyaterochka|перекр[её]ст|lenta|dixy|spar|perekrestok|магнит|winelab|samokat|vkusvill|lavka|fasol|kopikanc/i, "groceries"],
-  [/coffee|кофе|restaurant|рестор|kfc|mcdonald|burger|edarit|eda|mostabak|koreana light/i, "dining"],
+  [/yandex.{0,20}\beda\b|(?:яндекс)\s*еда(?!рит)/i, "dining"],
+  [/coffee|кофе|restaurant|рестор|kfc|mcdonald|burger|mostabak|koreana light/i, "dining"],
   [/metro|такси|yandex go|yandex 4121|urent|transport|primorskaya|ultima/i, "transit"],
   [/buketmuket|tabak|\bam\b/i, "shopping"],
   [/kopirka|rector|rosal|alfa iss|yazikov/i, "services"],
@@ -131,18 +133,29 @@ function extractMerchant(description, bankCategory) {
   return cellText(bankCategory).slice(0, 48) || text.slice(0, 48);
 }
 
+function yandexFoodKind(text) {
+  const hay = String(text || "")
+    .toLowerCase()
+    .replace(/[*_./-]+/g, " ");
+  if (/edarit|едарит/.test(hay)) return "groceries";
+  if (/(?:yandex|яндекс)/.test(hay) && (/\beda\b/.test(hay) || /яндекс\s*еда/.test(hay))) return "dining";
+  return null;
+}
+
 function detectSubcategory(category, text, merchant, amount) {
   const hay = `${text || ""} ${merchant || ""}`.toLowerCase();
   const amt = Number(amount) || 0;
+  const yandex = yandexFoodKind(hay);
 
   switch (category) {
     case "groceries":
-      if (/самокат|samokat|лавка|lavka/i.test(hay)) return "delivery_food";
+      if (yandex === "groceries" || /самокат|samokat|лавка|lavka|edarit|едарит/i.test(hay)) return "delivery_food";
       if (/вкусвилл|vkusvill|ферм/i.test(hay)) return "specialty_food";
       if (/winelab|винлаб|красное.*белое|ароматный мир|градус|пив/i.test(hay)) return "beverages_alcohol";
       return "supermarket";
 
     case "dining":
+      if (yandex === "dining") return "restaurant_delivery";
       if (/coffee|кофе|surf|etlon|цех 85|cekh 85|пекарня|булочная|булка|dodo|додо/i.test(hay)) return "cafes_coffee";
       if (/бургер|burger|kfc|mcdonald|ростикс|вкусно|шаверма|kebab|кебаб/i.test(hay)) return "fastfood";
       if (/обед|столовая|ланч|buffet/i.test(hay)) return "business_lunch";
@@ -208,6 +221,8 @@ function detectSubcategory(category, text, merchant, amount) {
 }
 
 function categorize(description, bankCategory, kind) {
+  const yandex = yandexFoodKind(`${description} ${bankCategory}`);
+  if (yandex) return yandex;
   if (/alfa lss|банкомат|cash withdrawal|снятие наличных/i.test(cellText(description))) return "cash";
   if (isInternalTransfer(description)) return "transfers";
   if (/перевод|sbp|c2c|между счетами|alfa pay/i.test(cellText(description))) return "transfers";
@@ -531,7 +546,8 @@ function extractSberMerchant(desc, categoryRaw, isInternal, amount) {
 
   if (/YANDEX\*4121\*GO/i.test(s)) return "Yandex Go";
   if (/YANDEX\*5411\*LAVKA/i.test(s)) return "Яндекс Лавка";
-  if (/YANDEX\*5411\*EDARIT/i.test(s)) return "Яндекс Еда";
+  if (/YANDEX\*5411\*EDARIT|EDARIT/i.test(s)) return "Yandex EdaRit";
+  if (/YANDEX\*5814\*EDA|YANDEX\s*5814\s*EDA|\bYANDEX\*EDA\b/i.test(s)) return "Yandex Eda";
   if (/YANDEX\*5815\*PLATFORM/i.test(s)) return "Яндекс Плюс";
   if (/YANDEX\*7999\*SCOOTERS/i.test(s)) return "Яндекс Самокаты";
   if (/SBER\*5411\*SAMOKAT/i.test(s)) return "Самокат";
@@ -560,6 +576,9 @@ function categorizeSber(desc, categoryRaw, kind, amount) {
   const c = cellText(categoryRaw).toLowerCase();
   const hay = `${d} ${c}`;
   const amt = Number(amount) || 0;
+
+  const yandex = yandexFoodKind(hay);
+  if (yandex) return yandex;
 
   if (/mapp_sberbank/i.test(d)) {
     if (amt > 0 && amt < 700) return "communications";
@@ -905,6 +924,7 @@ const folioImport = {
   parseSberPdfLines,
   isSberPdf,
   detectSubcategory,
+  yandexFoodKind,
 
   groupRowsByMonth(rows) {
     const groups = new Map();

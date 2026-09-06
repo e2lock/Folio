@@ -9,6 +9,7 @@ const state = {
   periodOpen: false,
   activityMonthOnly: true,
   items: [],
+  accounts: [],
   plannedItems: [],
   loading: true,
   syncError: null,
@@ -30,6 +31,7 @@ function normalizeItem(item) {
     ...item,
     category: i18n.normalizeCategory(item.category),
     subcategory: item.subcategory || null,
+    accountId: item.accountId || null,
   };
 }
 
@@ -175,8 +177,36 @@ function signed(item) {
   return item.kind === "income" ? item.amount : -item.amount;
 }
 
+function defaultAccount() {
+  return state.accounts.find((account) => account.isDefault) || state.accounts[0] || null;
+}
+
+function itemBelongsToAccount(item, account) {
+  if (!account) return false;
+  if (item.accountId) return item.accountId === account.id;
+  return Boolean(account.isDefault);
+}
+
+function openingTotal() {
+  return state.accounts.reduce((sum, account) => sum + Number(account.openingBalance || 0), 0);
+}
+
+function signedForAccount(account) {
+  return state.items
+    .filter((item) => itemBelongsToAccount(item, account))
+    .reduce((sum, item) => sum + signed(item), 0);
+}
+
+function accountRemainder(account) {
+  return Number(account.openingBalance || 0) + signedForAccount(account);
+}
+
+function openingFromStated(account, stated) {
+  return Number(stated) - signedForAccount(account);
+}
+
 function totals() {
-  const balance = state.items.reduce((sum, item) => sum + signed(item), 0);
+  const balance = openingTotal() + state.items.reduce((sum, item) => sum + signed(item), 0);
   const scopedItems = periodItems();
   const spendable = scopedItems.filter((i) => i.category !== "transfers");
   const income = spendable.filter((i) => i.kind === "income").reduce((s, i) => s + i.amount, 0);
@@ -341,10 +371,13 @@ function applyPeriodMode(mode, options = {}) {
 }
 
 const PLANNED_STORAGE_KEY = "folio_planned_list";
+const PLANNED_CLOUD_FLAG = "folio_planned_cloud_v1";
 
-function loadPlannedItems() {
+function loadLocalPlannedItems() {
   try {
-    const raw = localStorage.getItem(PLANNED_STORAGE_KEY) || localStorage.getItem("folio_planned_items_v1");
+    const hid = state.household?.id;
+    const scoped = hid ? localStorage.getItem(`${PLANNED_STORAGE_KEY}:${hid}`) : null;
+    const raw = scoped || localStorage.getItem(PLANNED_STORAGE_KEY) || localStorage.getItem("folio_planned_items_v1");
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -353,13 +386,15 @@ function loadPlannedItems() {
 
 function persistPlannedItems() {
   try {
+    const hid = state.household?.id;
     localStorage.setItem(PLANNED_STORAGE_KEY, JSON.stringify(state.plannedItems));
+    if (hid) localStorage.setItem(`${PLANNED_STORAGE_KEY}:${hid}`, JSON.stringify(state.plannedItems));
   } catch {
     /* ignore */
   }
 }
 
-state.plannedItems = loadPlannedItems();
+state.plannedItems = loadLocalPlannedItems();
 
 function computePlannerMetrics() {
   const { balance } = totals();
@@ -407,6 +442,175 @@ function computeFrequentExpenses(monthItems) {
     .slice(0, 7);
 }
 
+function weekdayIndex(iso) {
+  const day = new Date(`${iso}T12:00:00`).getDay();
+  return day === 0 ? 6 : day - 1;
+}
+
+function previousPeriodBounds() {
+  const { from, to } = getPeriodBounds();
+  const fromD = new Date(`${from}T12:00:00`);
+  const toD = new Date(`${to}T12:00:00`);
+  const span = Math.max(1, Math.round((toD - fromD) / 86400000) + 1);
+  const prevTo = new Date(fromD);
+  prevTo.setDate(prevTo.getDate() - 1);
+  const prevFrom = new Date(prevTo);
+  prevFrom.setDate(prevFrom.getDate() - span + 1);
+  return { from: isoLocal(prevFrom), to: isoLocal(prevTo) };
+}
+
+function computeSpendPortrait(monthItems) {
+  const expenses = monthItems.filter((i) => i.kind === "expense" && i.category !== "transfers");
+  const total = expenses.reduce((sum, item) => sum + item.amount, 0);
+  if (!expenses.length || total <= 0) return null;
+
+  const weekday = [0, 0, 0, 0, 0, 0, 0];
+  expenses.forEach((item) => {
+    weekday[weekdayIndex(item.date)] += item.amount;
+  });
+  const weekend = weekday[5] + weekday[6];
+  const weekendShare = weekend / total;
+  const peakIdx = weekday.indexOf(Math.max(...weekday));
+
+  const { from, to } = getPeriodBounds();
+  const fromD = new Date(`${from}T12:00:00`);
+  const toD = new Date(`${to}T12:00:00`);
+  const span = Math.max(1, Math.round((toD - fromD) / 86400000) + 1);
+  const mid = new Date(fromD);
+  mid.setDate(mid.getDate() + Math.floor(span / 2));
+  const midIso = isoLocal(mid);
+  const early = expenses.filter((item) => item.date < midIso).reduce((sum, item) => sum + item.amount, 0);
+  const late = total - early;
+
+  const merchants = {};
+  expenses.forEach((item) => {
+    const key = (item.merchant || "Без названия").trim();
+    if (!merchants[key]) merchants[key] = { merchant: key, total: 0, count: 0, category: item.category };
+    merchants[key].total += item.amount;
+    merchants[key].count += 1;
+  });
+  const merchantList = Object.values(merchants);
+  const habit = merchantList.filter((row) => row.count >= 3);
+  const habitTotal = habit.reduce((sum, row) => sum + row.total, 0);
+  const oneOffTotal = merchantList.filter((row) => row.count === 1).reduce((sum, row) => sum + row.total, 0);
+
+  const cats = {};
+  expenses.forEach((item) => {
+    cats[item.category] = (cats[item.category] || 0) + item.amount;
+  });
+
+  const prev = previousPeriodBounds();
+  const prevTotal = state.items
+    .filter((item) => item.kind === "expense" && item.category !== "transfers" && item.date >= prev.from && item.date <= prev.to)
+    .reduce((sum, item) => sum + item.amount, 0);
+  const vsPrev = prevTotal > 0 ? (total - prevTotal) / prevTotal : null;
+
+  const smallTotal = expenses.filter((item) => item.amount <= 1000).reduce((sum, item) => sum + item.amount, 0);
+  const { balance } = totals();
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const daysLeft = toD > today ? Math.ceil((toD - today) / 86400000) : 0;
+  const elapsed = Math.max(1, Math.floor(((toD > today ? today : toD) - fromD) / 86400000) + 1);
+  const burn = total / elapsed;
+  const runway = burn > 0 ? balance / burn : 99;
+  const projected = computePlannerMetrics().projectedRemainder;
+
+  let weather = "clear";
+  if (projected < 0 || (daysLeft > 0 && runway < daysLeft * 0.45)) weather = "storm";
+  else if (vsPrev != null && vsPrev > 0.18) weather = "wind";
+  else if (smallTotal / total > 0.28 || weekendShare > 0.42) weather = "haze";
+  else if (daysLeft > 0 && runway < daysLeft * 0.85) weather = "drizzle";
+
+  let handwriting = "steady";
+  if (weekendShare > 0.42) handwriting = "weekend";
+  else if (habitTotal / total > 0.45) handwriting = "ritual";
+  else if (oneOffTotal / total > 0.4) handwriting = "impulse";
+  else if (early > late * 1.25) handwriting = "frontloaded";
+  else if ((cats.dining || 0) / total > 0.22) handwriting = "city";
+
+  return {
+    total,
+    weekday,
+    weekendShare,
+    peakIdx,
+    early,
+    late,
+    habitTotal,
+    oneOffTotal,
+    vsPrev,
+    prevTotal,
+    smallTotal,
+    weather,
+    handwriting,
+    runway,
+    daysLeft,
+  };
+}
+
+function helpButton(helpKey, extraClass = "") {
+  if (!helpKey) return "";
+  const cls = extraClass ? `help-mark ${extraClass}` : "help-mark";
+  return `<button class="${cls}" type="button" data-help="${helpKey}" aria-label="${i18n.t("helpAria")}">?</button>`;
+}
+
+function closeHelpFloat() {
+  const pop = document.getElementById("help-float");
+  if (!pop) return;
+  pop.hidden = true;
+  pop.textContent = "";
+  document.querySelectorAll(".help-mark.is-open").forEach((btn) => {
+    btn.classList.remove("is-open");
+    btn.setAttribute("aria-expanded", "false");
+  });
+}
+
+function openHelpFloat(btn) {
+  const pop = document.getElementById("help-float");
+  if (!pop) return;
+  const key = btn.dataset.help;
+  const text = key ? i18n.t(key) : "";
+  if (!text || text === key) return;
+  const already = btn.classList.contains("is-open");
+  closeHelpFloat();
+  if (already) return;
+  pop.textContent = text;
+  pop.hidden = false;
+  btn.classList.add("is-open");
+  btn.setAttribute("aria-expanded", "true");
+  const rect = btn.getBoundingClientRect();
+  const width = Math.min(320, window.innerWidth - 24);
+  let left = rect.left + rect.width / 2 - width / 2;
+  left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+  let top = rect.bottom + 8;
+  pop.style.width = `${width}px`;
+  pop.style.left = `${left}px`;
+  pop.style.top = `${top}px`;
+  const box = pop.getBoundingClientRect();
+  if (box.bottom > window.innerHeight - 12) {
+    pop.style.top = `${Math.max(12, rect.top - box.height - 8)}px`;
+  }
+}
+
+function vsPrevLabel(vsPrev) {
+  if (vsPrev == null) return i18n.t("weatherVsPrevNew");
+  const pct = Math.round(Math.abs(vsPrev) * 100);
+  if (pct < 4) return i18n.t("weatherVsPrevFlat");
+  return i18n.t(vsPrev > 0 ? "weatherVsPrevUp" : "weatherVsPrevDown", { pct });
+}
+
+function openActivitySearch(term, category) {
+  state.query = term || "";
+  state.category = category || "all";
+  state.activityMonthOnly = true;
+  const searchInput = document.getElementById("search");
+  if (searchInput) searchInput.value = state.query;
+  const monthOnlyCheckbox = document.getElementById("month-only");
+  if (monthOnlyCheckbox) monthOnlyCheckbox.checked = true;
+  persistMonthPrefs();
+  setView("activity");
+  render();
+}
+
 function generateSavingsTips(monthItems) {
   const expenses = monthItems.filter((i) => i.kind === "expense" && i.category !== "transfers");
   const total = expenses.reduce((sum, i) => sum + i.amount, 0);
@@ -424,6 +628,8 @@ function generateSavingsTips(monthItems) {
     tips.push({
       icon: "☕",
       title: "Кафе и доставка еды",
+      category: "dining",
+      saving,
       text: i18n.t("tipDeliveryDining", {
         amount: i18n.formatMoney(diningTotal),
         count: diningItems.length,
@@ -439,6 +645,7 @@ function generateSavingsTips(monthItems) {
     tips.push({
       icon: "🪙",
       title: "Мелкие незаметные траты",
+      saving: Math.round(smallLeaksTotal * 0.15),
       text: i18n.t("tipSmallLeaks", { amount: i18n.formatMoney(smallLeaksTotal) }),
     });
   }
@@ -450,6 +657,8 @@ function generateSavingsTips(monthItems) {
     tips.push({
       icon: "📱",
       title: "Сервисы и подписки",
+      category: "services",
+      saving: Math.round(subsTotal * 0.2),
       text: i18n.t("tipSubscriptions", { amount: i18n.formatMoney(subsTotal) }),
     });
   }
@@ -461,6 +670,8 @@ function generateSavingsTips(monthItems) {
     tips.push({
       icon: "🚕",
       title: "Такси и поездки",
+      category: "transit",
+      saving: Math.round(transitTotal * 0.2),
       text: i18n.t("tipTaxi", { amount: i18n.formatMoney(transitTotal) }),
     });
   }
@@ -471,6 +682,8 @@ function generateSavingsTips(monthItems) {
     tips.push({
       icon: "🛒",
       title: "Супермаркеты",
+      category: "groceries",
+      saving: Math.round(groceriesTotal * 0.15),
       text: i18n.t("tipGroceries", { amount: i18n.formatMoney(groceriesTotal) }),
     });
   }
@@ -536,6 +749,68 @@ function renderJournalSwitch() {
   });
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function fillAccountSelect(select, selectedId) {
+  if (!select) return;
+  const current = selectedId || defaultAccount()?.id || "";
+  select.replaceChildren();
+  if (!state.accounts.length) {
+    select.hidden = true;
+    return;
+  }
+  select.hidden = false;
+  state.accounts.forEach((account) => {
+    const opt = document.createElement("option");
+    opt.value = account.id;
+    opt.textContent = account.name;
+    if (account.id === current) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+function renderAccounts() {
+  const block = document.getElementById("accounts-block");
+  const list = document.getElementById("accounts-list");
+  if (!block || !list) return;
+  const ready = Boolean(state.session && state.household);
+  block.hidden = !ready;
+  if (!ready) {
+    list.replaceChildren();
+    return;
+  }
+  list.innerHTML = state.accounts
+    .map((account) => {
+      const remainder = accountRemainder(account);
+      return `
+        <li class="account-row" data-account-id="${account.id}">
+          <div class="account-row-head">
+            <strong>${escapeHtml(account.name)}</strong>
+            <span class="account-remainder">${i18n.formatMoney(remainder)}</span>
+          </div>
+          <label class="account-stated">
+            <span>${i18n.t("accountCardBalance")}</span>
+            <input type="number" step="0.01" data-account-stated="${account.id}" value="${remainder}" />
+          </label>
+          ${
+            state.accounts.length > 1
+              ? `<button class="text-btn" type="button" data-remove-account="${account.id}">${i18n.t("accountRemove")}</button>`
+              : ""
+          }
+        </li>
+      `;
+    })
+    .join("");
+  fillAccountSelect(document.getElementById("compose-account"));
+  fillAccountSelect(document.getElementById("import-account"));
+}
+
 function renderGate() {
   const gate = document.getElementById("gate");
   const authForm = document.getElementById("auth-form");
@@ -586,6 +861,7 @@ function renderGate() {
   const deleteAllTest = document.getElementById("delete-all-test");
   if (deleteAllTest) deleteAllTest.hidden = !state.session || !state.household;
   renderJournalSwitch();
+  renderAccounts();
 }
 
 function renderSyncStatus() {
@@ -822,13 +1098,61 @@ function renderAnalytics(scopedItems) {
   }
 
   const items = [];
+  const portrait = computeSpendPortrait(scopedItems);
+
+  if (portrait?.vsPrev != null) {
+    const delta = data.totalSpend - portrait.prevTotal;
+    items.push(`
+      <div class="insight-tile">
+        <div class="insight-head">
+          <span class="insight-badge compare">${portrait.vsPrev > 0 ? "↑" : "↓"}</span>
+          <h3>${i18n.t("insightsVsPrevTitle")}</h3>
+          ${helpButton("insightsVsPrevHelp")}
+        </div>
+        <p class="insight-val">${portrait.vsPrev > 0 ? "+" : "−"}${i18n.formatMoney(Math.abs(delta))}</p>
+        <p class="insight-desc">${vsPrevLabel(portrait.vsPrev)}</p>
+      </div>
+    `);
+  }
+
+  if (portrait && portrait.weekendShare >= 0.28) {
+    items.push(`
+      <div class="insight-tile">
+        <div class="insight-head">
+          <span class="insight-badge weekend">☾</span>
+          <h3>${i18n.t("insightsWeekendTitle")}</h3>
+          ${helpButton("insightsWeekendHelp")}
+        </div>
+        <p class="insight-val">${Math.round(portrait.weekendShare * 100)}%</p>
+        <p class="insight-desc">${i18n.t("insightsWeekendHint", { pct: Math.round(portrait.weekendShare * 100) })}</p>
+      </div>
+    `);
+  }
+
+  if (portrait && portrait.habitTotal > 0) {
+    items.push(`
+      <div class="insight-tile">
+        <div class="insight-head">
+          <span class="insight-badge habit">∞</span>
+          <h3>${i18n.t("insightsHabitTitle")}</h3>
+          ${helpButton("insightsHabitHelp")}
+        </div>
+        <p class="insight-val">${i18n.formatMoney(portrait.habitTotal)}</p>
+        <p class="insight-desc">${i18n.t("insightsHabitHint", {
+          amount: i18n.formatMoney(portrait.habitTotal),
+          pct: Math.round((portrait.habitTotal / portrait.total) * 100),
+        })}</p>
+      </div>
+    `);
+  }
 
   // Карточка 1: Темп сгорания
   items.push(`
     <div class="insight-tile">
       <div class="insight-head">
         <span class="insight-badge burn">⚡</span>
-        <h3>${i18n.t("insightsBurnTitle")}</h3>
+          <h3>${i18n.t("insightsBurnTitle")}</h3>
+          ${helpButton("insightsBurnHelp")}
       </div>
       <p class="insight-val">${i18n.formatMoney(data.burnPerDay)}<span class="unit"> / день</span></p>
       <p class="insight-desc">${i18n.t("insightsBurnHint")}</p>
@@ -931,6 +1255,121 @@ function renderAnalytics(scopedItems) {
   });
 }
 
+const WEEKDAY_SHORT = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
+
+function renderWalletWeather(monthItems) {
+  const card = document.getElementById("wallet-weather");
+  if (!card) return;
+  const portrait = computeSpendPortrait(monthItems);
+  if (!portrait) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  card.dataset.weather = portrait.weather;
+  const title = document.getElementById("weather-title");
+  const hand = document.getElementById("weather-hand");
+  const text = document.getElementById("weather-text");
+  const stats = document.getElementById("weather-stats");
+  const weatherKey = {
+    clear: "weatherClear",
+    haze: "weatherHaze",
+    drizzle: "weatherDrizzle",
+    wind: "weatherWind",
+    storm: "weatherStorm",
+  }[portrait.weather];
+  const weatherTextKey = {
+    clear: "weatherClearText",
+    haze: "weatherHazeText",
+    drizzle: "weatherDrizzleText",
+    wind: "weatherWindText",
+    storm: "weatherStormText",
+  }[portrait.weather];
+  const handKey = {
+    steady: "handSteady",
+    weekend: "handWeekend",
+    ritual: "handRitual",
+    impulse: "handImpulse",
+    frontloaded: "handFrontloaded",
+    city: "handCity",
+  }[portrait.handwriting];
+  if (title) title.textContent = i18n.t(weatherKey);
+  if (hand) hand.textContent = i18n.t(handKey);
+  if (text) text.textContent = i18n.t(weatherTextKey);
+  if (stats) {
+    const runwayDays = Math.max(0, Math.round(portrait.runway));
+    stats.innerHTML = `
+      <div>
+        <span class="label">${i18n.t("weatherCompareLabel")} ${helpButton("insightsVsPrevHelp", "is-on-dark")}</span>
+        <strong>${vsPrevLabel(portrait.vsPrev)}</strong>
+      </div>
+      <div>
+        <span class="label">${i18n.t("weatherMixLabel")} ${helpButton("insightsHabitHelp", "is-on-dark")}</span>
+        <strong>${i18n.t("weatherHabitSplit", {
+          habit: i18n.formatMoney(portrait.habitTotal),
+          impulse: i18n.formatMoney(portrait.oneOffTotal),
+        })}</strong>
+      </div>
+      <div>
+        <span class="label">${i18n.t("weatherRunwayLabel")}</span>
+        <strong>${i18n.t("weatherRunway", { days: runwayDays })}</strong>
+      </div>
+    `;
+  }
+}
+
+function renderSplitBar(leftLabel, rightLabel, leftValue, rightValue) {
+  const sum = leftValue + rightValue;
+  const leftPct = sum > 0 ? Math.round((leftValue / sum) * 100) : 50;
+  return `
+    <div class="split-meter">
+      <div class="split-meter-head">
+        <span>${leftLabel}</span>
+        <span>${rightLabel}</span>
+      </div>
+      <div class="split-track"><span style="width:${leftPct}%"></span></div>
+      <div class="split-meter-head">
+        <strong>${i18n.formatMoney(leftValue)}</strong>
+        <strong>${i18n.formatMoney(rightValue)}</strong>
+      </div>
+    </div>
+  `;
+}
+
+function renderSpendPortrait(monthItems) {
+  const chart = document.getElementById("weekday-chart");
+  const splits = document.getElementById("portrait-splits");
+  const portrait = computeSpendPortrait(monthItems);
+  if (!chart || !splits) return;
+  if (!portrait) {
+    chart.innerHTML = `<p class="hint">${i18n.t("insightsNoDataPeriod")}</p>`;
+    splits.replaceChildren();
+    return;
+  }
+  const maxDay = Math.max(...portrait.weekday, 1);
+  chart.innerHTML = portrait.weekday
+    .map((value, index) => {
+      const height = Math.max(8, Math.round((value / maxDay) * 100));
+      const peak = index === portrait.peakIdx ? " is-peak" : "";
+      const weekend = index >= 5 ? " is-weekend" : "";
+      return `
+        <div class="weekday-col${peak}${weekend}" title="${i18n.formatMoney(value)}">
+          <span class="weekday-bar" style="height:${height}%"></span>
+          <span class="weekday-name">${WEEKDAY_SHORT[index]}</span>
+        </div>
+      `;
+    })
+    .join("");
+  splits.innerHTML = `
+    <p class="label">${i18n.t("splitEarlyLate")}</p>
+    ${renderSplitBar(i18n.t("splitEarly"), i18n.t("splitLate"), portrait.early, portrait.late)}
+    <p class="label">${i18n.t("splitHabitImpulse")}</p>
+    ${renderSplitBar(i18n.t("splitHabit"), i18n.t("splitImpulse"), portrait.habitTotal, portrait.oneOffTotal)}
+    <p class="label">${i18n.t("splitWeekend")}</p>
+    ${renderSplitBar(i18n.t("splitWeekday"), i18n.t("splitWeekendLabel"), portrait.total - portrait.weekendShare * portrait.total, portrait.weekendShare * portrait.total)}
+  `;
+}
+
 function renderPlanner(monthItems) {
   const metrics = computePlannerMetrics();
 
@@ -961,48 +1400,67 @@ function renderPlanner(monthItems) {
   if (upCount) upCount.textContent = `${expItems.length} запланированных списаний`;
   if (incCount) incCount.textContent = `${incItems.length} запланированных доходов`;
 
-  // 3. Советы по экономии
+  renderWalletWeather(monthItems);
+  renderSpendPortrait(monthItems);
+
   const tipsContainer = document.getElementById("planner-tips-list");
   if (tipsContainer) {
     const tips = generateSavingsTips(monthItems);
     tipsContainer.innerHTML = tips
       .map(
         (tip) => `
-        <div class="tip-item">
+        <button class="tip-item" type="button" data-tip-category="${tip.category || ""}">
           <span class="tip-icon">${tip.icon}</span>
           <div class="tip-content">
-            <strong>${tip.title}</strong>
+            <strong>${escapeHtml(tip.title)}</strong>
             <p>${tip.text}</p>
           </div>
-        </div>
+          ${
+            tip.saving
+              ? `<span class="tip-save">${i18n.t("tipSaveChip", { amount: i18n.formatMoney(tip.saving) })}</span>`
+              : ""
+          }
+        </button>
       `
       )
       .join("");
+    tipsContainer.querySelectorAll("[data-tip-category]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const category = btn.dataset.tipCategory;
+        if (category) openActivitySearch("", category);
+      });
+    });
   }
 
-  // 4. Частые траты
   const freqContainer = document.getElementById("frequent-expenses-list");
   if (freqContainer) {
     const frequent = computeFrequentExpenses(monthItems);
     if (!frequent.length) {
-      freqContainer.innerHTML = `<li class="hint">Нет данных по тратам за выбранный месяц.</li>`;
+      freqContainer.innerHTML = `<li class="hint">Нет данных по тратам за выбранный период.</li>`;
     } else {
+      const maxTotal = Math.max(...frequent.map((row) => row.total));
       freqContainer.innerHTML = frequent
         .map(
           (f) => `
-          <li class="frequent-row">
-            <div class="frequent-info">
-              <span class="frequent-name">${f.merchant}</span>
-              <span class="frequent-meta">${i18n.categoryLabel(f.category)}</span>
-            </div>
-            <div class="frequent-stats">
-              <span class="frequent-count-badge">${f.count} ${f.count === 1 ? "раз" : f.count < 5 ? "раза" : "раз"}</span>
-              <strong class="frequent-total">${i18n.formatMoney(f.total)}</strong>
-            </div>
+          <li>
+            <button class="frequent-row" type="button" data-search-term="${escapeHtml(f.merchant)}">
+              <div class="frequent-info">
+                <span class="frequent-name">${escapeHtml(f.merchant)}</span>
+                <span class="frequent-meta">${i18n.categoryLabel(f.category)}</span>
+                <span class="frequent-bar"><span style="width:${Math.max(8, Math.round((f.total / maxTotal) * 100))}%"></span></span>
+              </div>
+              <div class="frequent-stats">
+                <span class="frequent-count-badge">${f.count} ${f.count === 1 ? "раз" : f.count < 5 ? "раза" : "раз"}</span>
+                <strong class="frequent-total">${i18n.formatMoney(f.total)}</strong>
+              </div>
+            </button>
           </li>
         `
         )
         .join("");
+      freqContainer.querySelectorAll("[data-search-term]").forEach((btn) => {
+        btn.addEventListener("click", () => openActivitySearch(btn.dataset.searchTerm));
+      });
     }
   }
 
@@ -1039,6 +1497,7 @@ function renderPlanner(monthItems) {
 }
 
 function render() {
+  closeHelpFloat();
   renderGate();
   renderSyncStatus();
   renderPeriodChrome();
@@ -1060,6 +1519,7 @@ function render() {
   renderLists();
   renderAnalytics(monthItems);
   renderPlanner(monthItems);
+  renderAccounts();
 }
 
 function updateSubcategoryOptions(catSelect, subSelect) {
@@ -1113,6 +1573,7 @@ function openSheet() {
   if (catSelect && subSelect) {
     updateSubcategoryOptions(catSelect, subSelect);
   }
+  fillAccountSelect(document.getElementById("compose-account"));
 
   form.elements.merchant.focus();
 }
@@ -1157,6 +1618,7 @@ function renderImportSheet() {
     else if (busy) status.textContent = i18n.t(preview ? "importSaving" : "importParsing");
   }
 
+  fillAccountSelect(document.getElementById("import-account"));
   document.getElementById("import-pick")?.toggleAttribute("disabled", busy);
   confirmBtn?.toggleAttribute("disabled", busy || !preview?.stats.selected);
   selectAllBtn?.toggleAttribute("disabled", busy || !preview);
@@ -1286,12 +1748,87 @@ function setBusy(busy) {
   renderSyncStatus();
 }
 
-async function loadLedger() {
-  if (!state.session || !state.household) {
-    state.items = [];
+async function backfillSubcategories() {
+  if (!window.folioImport?.detectSubcategory || !state.items.length) return;
+  const patches = [];
+  state.items.forEach((item) => {
+    const hay = `${item.merchant || ""} ${item.note || ""}`;
+    const yandex = folioImport.yandexFoodKind?.(hay);
+    if (yandex === "groceries" && (item.category !== "groceries" || item.subcategory !== "delivery_food")) {
+      item.category = "groceries";
+      item.subcategory = "delivery_food";
+      patches.push({ id: item.id, fields: { category: "groceries", subcategory: "delivery_food" } });
+      return;
+    }
+    if (yandex === "dining" && (item.category !== "dining" || item.subcategory !== "restaurant_delivery")) {
+      item.category = "dining";
+      item.subcategory = "restaurant_delivery";
+      patches.push({ id: item.id, fields: { category: "dining", subcategory: "restaurant_delivery" } });
+      return;
+    }
+    if (item.subcategory) return;
+    const next = folioImport.detectSubcategory(item.category, item.note, item.merchant, item.amount);
+    if (!next) return;
+    item.subcategory = next;
+    patches.push({ id: item.id, fields: { subcategory: next } });
+  });
+  if (!patches.length) return;
+  await db.updateItemFields(patches);
+}
+
+async function syncPlannedFromCloud() {
+  const hid = state.household.id;
+  const remote = await db.loadPlannedItems(hid);
+  if (remote.length) {
+    state.plannedItems = remote;
+    persistPlannedItems();
     return;
   }
-  state.items = (await db.loadItems(state.household.id)).map(normalizeItem);
+  if (localStorage.getItem(PLANNED_CLOUD_FLAG)) {
+    state.plannedItems = [];
+    persistPlannedItems();
+    return;
+  }
+  const local = loadLocalPlannedItems();
+  if (local.length) {
+    await db.insertPlannedItems(local);
+    state.plannedItems = local;
+  } else {
+    state.plannedItems = [];
+  }
+  try {
+    localStorage.setItem(PLANNED_CLOUD_FLAG, "1");
+  } catch {
+    /* ignore */
+  }
+  persistPlannedItems();
+}
+
+async function loadJournalData() {
+  if (!state.session || !state.household) {
+    state.items = [];
+    state.accounts = [];
+    state.plannedItems = [];
+    return;
+  }
+  const hid = state.household.id;
+  const [items, accounts] = await Promise.all([db.loadItems(hid), db.loadAccounts(hid)]);
+  state.items = items.map(normalizeItem);
+  state.accounts = accounts;
+  if (!state.accounts.length) {
+    const created = await db.insertAccount({
+      name: i18n.t("accountDefaultName"),
+      openingBalance: 0,
+      isDefault: true,
+    });
+    state.accounts = [created];
+  }
+  await syncPlannedFromCloud();
+  try {
+    await backfillSubcategories();
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 function applyJournalList(list, preferredId) {
@@ -1307,11 +1844,13 @@ function applyJournalList(list, preferredId) {
 async function refreshJournals(preferredId) {
   applyJournalList(await db.ensureJournals(), preferredId);
   if (state.household) {
-    await loadLedger();
+    await loadJournalData();
     state.syncError = null;
     state.authError = null;
   } else {
     state.items = [];
+    state.accounts = [];
+    state.plannedItems = [];
   }
 }
 
@@ -1321,6 +1860,8 @@ async function applySession(session) {
   state.journals = [];
   state.membershipRole = null;
   state.items = [];
+  state.accounts = [];
+  state.plannedItems = [];
   state.passwordError = null;
   if (!session) {
     state.authError = null;
@@ -1501,8 +2042,9 @@ document.getElementById("plan-sheet")?.addEventListener("click", (event) => {
   if (event.target.id === "plan-sheet") closePlanSheet();
 });
 
-document.getElementById("plan-form")?.addEventListener("submit", (event) => {
+document.getElementById("plan-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (state.loading || !db.ready || !state.household) return;
   const form = event.currentTarget;
   const data = new FormData(form);
   const planned = {
@@ -1518,15 +2060,38 @@ document.getElementById("plan-form")?.addEventListener("submit", (event) => {
   persistPlannedItems();
   closePlanSheet();
   render();
+  try {
+    await db.insertPlannedItem(planned);
+    state.syncError = null;
+    renderSyncStatus();
+  } catch (error) {
+    console.error(error);
+    state.plannedItems = state.plannedItems.filter((row) => row.id !== planned.id);
+    persistPlannedItems();
+    state.syncError = i18n.t("syncSaveError");
+    render();
+  }
 });
 
-document.getElementById("planned-items-list")?.addEventListener("click", (event) => {
+document.getElementById("planned-items-list")?.addEventListener("click", async (event) => {
   const btn = event.target.closest("[data-remove-planned]");
   if (!btn) return;
   const id = btn.dataset.removePlanned;
+  const prev = state.plannedItems.slice();
   state.plannedItems = state.plannedItems.filter((p) => p.id !== id);
   persistPlannedItems();
   render();
+  try {
+    await db.deletePlannedItem(id);
+    state.syncError = null;
+    renderSyncStatus();
+  } catch (error) {
+    console.error(error);
+    state.plannedItems = prev;
+    persistPlannedItems();
+    state.syncError = i18n.t("syncSaveError");
+    render();
+  }
 });
 
 // Burger menu listeners
@@ -1572,6 +2137,7 @@ document.getElementById("compose-form").addEventListener("submit", async (event)
     kind,
     category: kind === "income" ? "income" : String(data.get("category")),
     subcategory: String(data.get("subcategory") || ""),
+    accountId: String(data.get("account") || "") || defaultAccount()?.id || null,
     date: String(data.get("date")),
   });
   state.items.unshift(item);
@@ -1752,7 +2318,10 @@ document.getElementById("import-clear-all")?.addEventListener("click", () => {
 
 document.getElementById("import-confirm")?.addEventListener("click", async () => {
   if (!state.importPreview || state.importBusy || !state.household) return;
-  const selected = state.importPreview.rows.filter((row) => row.selected).map((row) => normalizeItem(row.item));
+  const accountId = document.getElementById("import-account")?.value || defaultAccount()?.id || null;
+  const selected = state.importPreview.rows
+    .filter((row) => row.selected)
+    .map((row) => normalizeItem({ ...row.item, accountId }));
   if (!selected.length) return;
 
   state.importBusy = true;
@@ -1787,6 +2356,80 @@ document.getElementById("import-confirm")?.addEventListener("click", async () =>
   }
 });
 
+document.getElementById("account-add-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (state.loading || !db.ready || !state.household) return;
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  const name = String(data.get("name") || "").trim();
+  const stated = data.get("stated");
+  if (!name) return;
+  setBusy(true);
+  try {
+    const account = await db.insertAccount({
+      name,
+      openingBalance: stated === "" || stated == null ? 0 : Number(stated),
+      isDefault: false,
+    });
+    state.accounts.push(account);
+    form.reset();
+    state.syncError = null;
+  } catch (error) {
+    console.error(error);
+    state.syncError = i18n.t("syncSaveError");
+  }
+  setBusy(false);
+  render();
+});
+
+document.getElementById("accounts-list")?.addEventListener("change", async (event) => {
+  const input = event.target.closest("[data-account-stated]");
+  if (!input || state.loading) return;
+  const id = input.dataset.accountStated;
+  const account = state.accounts.find((row) => row.id === id);
+  if (!account) return;
+  const stated = Number(input.value);
+  if (!Number.isFinite(stated)) return;
+  const openingBalance = openingFromStated(account, stated);
+  const prev = account.openingBalance;
+  account.openingBalance = openingBalance;
+  render();
+  try {
+    await db.updateAccount(id, { openingBalance });
+    state.syncError = null;
+    renderSyncStatus();
+  } catch (error) {
+    console.error(error);
+    account.openingBalance = prev;
+    state.syncError = i18n.t("syncSaveError");
+    render();
+  }
+});
+
+document.getElementById("accounts-list")?.addEventListener("click", async (event) => {
+  const btn = event.target.closest("[data-remove-account]");
+  if (!btn || state.loading) return;
+  const id = btn.dataset.removeAccount;
+  if (state.accounts.length < 2) return;
+  const prev = state.accounts.slice();
+  const remaining = state.accounts.filter((row) => row.id !== id);
+  try {
+    await db.deleteAccount(id);
+    if (!remaining.some((row) => row.isDefault) && remaining[0]) {
+      remaining[0].isDefault = true;
+      await db.updateAccount(remaining[0].id, { isDefault: true });
+    }
+    state.accounts = remaining;
+    state.syncError = null;
+    renderSyncStatus();
+  } catch (error) {
+    console.error(error);
+    state.accounts = prev;
+    state.syncError = i18n.t("syncSaveError");
+  }
+  render();
+});
+
 document.getElementById("delete-all-test")?.addEventListener("click", async () => {
   if (state.loading || !state.household) return;
   const journal = state.household.name || i18n.t("journalLabel");
@@ -1806,5 +2449,19 @@ document.getElementById("delete-all-test")?.addEventListener("click", async () =
   setBusy(false);
   render();
 });
+
+document.addEventListener("click", (event) => {
+  const btn = event.target.closest(".help-mark");
+  if (btn) {
+    event.preventDefault();
+    event.stopPropagation();
+    openHelpFloat(btn);
+    return;
+  }
+  if (!event.target.closest("#help-float")) closeHelpFloat();
+});
+
+window.addEventListener("resize", closeHelpFloat);
+document.addEventListener("scroll", closeHelpFloat, true);
 
 boot();

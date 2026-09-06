@@ -8,6 +8,11 @@ function isConfigured() {
   return !PLACEHOLDER_MARKERS.some((mark) => url.includes(mark) || key.includes(mark));
 }
 
+function emptyToNull(value) {
+  const text = String(value || "").trim();
+  return text || null;
+}
+
 function mapRow(row) {
   return {
     id: row.id,
@@ -16,6 +21,8 @@ function mapRow(row) {
     amount: Number(row.amount),
     kind: row.kind,
     category: i18n.normalizeCategory(row.category),
+    subcategory: emptyToNull(row.subcategory),
+    accountId: row.account_id || null,
     date: String(row.date).slice(0, 10),
     householdId: row.household_id || null,
   };
@@ -29,7 +36,43 @@ function toRow(item) {
     amount: item.amount,
     kind: item.kind,
     category: item.category,
+    subcategory: emptyToNull(item.subcategory),
+    account_id: item.accountId || null,
     date: item.date,
+  };
+}
+
+function mapAccount(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    openingBalance: Number(row.opening_balance || 0),
+    isDefault: Boolean(row.is_default),
+    householdId: row.household_id || null,
+  };
+}
+
+function mapPlanned(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    amount: Number(row.amount),
+    kind: row.kind,
+    category: i18n.normalizeCategory(row.category),
+    subcategory: emptyToNull(row.subcategory),
+    date: row.date ? String(row.date).slice(0, 10) : "",
+  };
+}
+
+function toPlannedRow(item) {
+  return {
+    id: item.id,
+    name: String(item.name || "").trim(),
+    amount: item.amount,
+    kind: item.kind,
+    category: item.category,
+    subcategory: emptyToNull(item.subcategory),
+    date: item.date || null,
   };
 }
 
@@ -152,7 +195,7 @@ const db = {
     if (!this.ready) throw new Error(this.lastError || "not_ready");
     let query = this.client
       .from("transactions")
-      .select("id, merchant, note, amount, kind, category, date, household_id")
+      .select("id, merchant, note, amount, kind, category, subcategory, account_id, date, household_id")
       .order("date", { ascending: false })
       .order("id", { ascending: false });
     if (householdId) query = query.eq("household_id", householdId);
@@ -189,6 +232,97 @@ const db = {
     let query = this.client.from("transactions").delete();
     if (householdId) query = query.eq("household_id", householdId);
     const { error } = await query;
+    if (error) throw error;
+  },
+
+  async updateItemFields(patches) {
+    if (!this.ready) throw new Error("not_ready");
+    if (!patches.length) return;
+    const chunkSize = 25;
+    for (let i = 0; i < patches.length; i += chunkSize) {
+      const chunk = patches.slice(i, i + chunkSize);
+      const results = await Promise.all(
+        chunk.map((patch) =>
+          this.client.from("transactions").update(patch.fields).eq("id", patch.id)
+        )
+      );
+      const failed = results.find((row) => row.error);
+      if (failed?.error) throw failed.error;
+    }
+  },
+
+  async loadAccounts(householdId) {
+    if (!this.ready) throw new Error(this.lastError || "not_ready");
+    let query = this.client
+      .from("accounts")
+      .select("id, name, opening_balance, is_default, household_id")
+      .order("created_at", { ascending: true });
+    if (householdId) query = query.eq("household_id", householdId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []).map(mapAccount);
+  },
+
+  async insertAccount(account) {
+    if (!this.ready) throw new Error("not_ready");
+    const { data, error } = await this.client
+      .from("accounts")
+      .insert({
+        name: String(account.name || "").trim(),
+        opening_balance: Number(account.openingBalance || 0),
+        is_default: Boolean(account.isDefault),
+      })
+      .select("id, name, opening_balance, is_default, household_id")
+      .single();
+    if (error) throw error;
+    return mapAccount(data);
+  },
+
+  async updateAccount(id, fields) {
+    if (!this.ready) throw new Error("not_ready");
+    const row = {};
+    if (fields.name != null) row.name = String(fields.name).trim();
+    if (fields.openingBalance != null) row.opening_balance = Number(fields.openingBalance);
+    if (fields.isDefault != null) row.is_default = Boolean(fields.isDefault);
+    const { error } = await this.client.from("accounts").update(row).eq("id", id);
+    if (error) throw error;
+  },
+
+  async deleteAccount(id) {
+    if (!this.ready) throw new Error("not_ready");
+    const { error } = await this.client.from("accounts").delete().eq("id", id);
+    if (error) throw error;
+  },
+
+  async loadPlannedItems(householdId) {
+    if (!this.ready) throw new Error(this.lastError || "not_ready");
+    let query = this.client
+      .from("planned_items")
+      .select("id, name, amount, kind, category, subcategory, date, household_id")
+      .order("date", { ascending: true })
+      .order("id", { ascending: true });
+    if (householdId) query = query.eq("household_id", householdId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []).map(mapPlanned);
+  },
+
+  async insertPlannedItem(item) {
+    if (!this.ready) throw new Error("not_ready");
+    const { error } = await this.client.from("planned_items").insert(toPlannedRow(item));
+    if (error) throw error;
+  },
+
+  async insertPlannedItems(items) {
+    if (!this.ready) throw new Error("not_ready");
+    if (!items.length) return;
+    const { error } = await this.client.from("planned_items").insert(items.map(toPlannedRow));
+    if (error) throw error;
+  },
+
+  async deletePlannedItem(id) {
+    if (!this.ready) throw new Error("not_ready");
+    const { error } = await this.client.from("planned_items").delete().eq("id", id);
     if (error) throw error;
   },
 };

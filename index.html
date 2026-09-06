@@ -106,6 +106,16 @@
           </div>
         </div>
 
+        <div class="accounts-block" id="accounts-block" hidden>
+          <p class="journal-label" data-i18n="accountsLabel">Счета</p>
+          <ul class="accounts-list" id="accounts-list"></ul>
+          <form id="account-add-form" class="account-add-form">
+            <input name="name" maxlength="48" required data-i18n-placeholder="accountNamePlaceholder" placeholder="Сбер, наличные..." />
+            <input name="stated" type="number" step="0.01" data-i18n-placeholder="accountCardPlaceholder" placeholder="Остаток на карте" />
+            <button class="ghost" type="submit" data-i18n="accountAdd">Добавить счёт</button>
+          </form>
+        </div>
+
         <nav class="nav">
           <button class="nav-btn is-active" data-view="overview" type="button" data-i18n="navOverview">Обзор</button>
           <button class="nav-btn" data-view="planner" type="button" data-i18n="navPlanner">Планировщик</button>
@@ -135,7 +145,7 @@
             <article class="card balance-card">
               <p class="label" data-i18n="availableBalance">Сальдо журнала</p>
               <p class="balance" id="balance-figure">0 ₽</p>
-              <p class="balance-hint" data-i18n="balanceHint">Доходы минус расходы по всем записям. Не остаток на счёте и не учитывает долг по кредитке.</p>
+              <p class="balance-hint" data-i18n="balanceHint">Начальный остаток счетов плюс все операции журнала.</p>
               
               <!-- Планируемый остаток и будущие списания в главном блоке -->
               <div class="hero-planner-preview" id="hero-planner-preview">
@@ -221,12 +231,29 @@
             </div>
           </header>
 
-          <!-- Сводка планировщика: текущий счет, грядущие расходы, остаток -->
+          <article class="wallet-weather" id="wallet-weather" hidden>
+            <div class="weather-sky" aria-hidden="true">
+              <span class="weather-orb"></span>
+              <span class="weather-drift"></span>
+              <span class="weather-drift late"></span>
+            </div>
+            <div class="weather-copy">
+              <p class="eyebrow weather-kicker">
+                <span data-i18n="walletWeatherEyebrow">Погода кошелька</span>
+                <button class="help-mark is-on-dark" type="button" data-help="weatherHelp" data-i18n-aria="helpAria" aria-label="Что это значит">?</button>
+              </p>
+              <h2 id="weather-title">Ясно</h2>
+              <p class="weather-hand" id="weather-hand"></p>
+              <p class="hint" id="weather-text"></p>
+            </div>
+            <div class="weather-stats" id="weather-stats"></div>
+          </article>
+
           <div class="planner-summary-grid">
             <article class="card planner-card current-balance-box">
               <p class="label" data-i18n="currentBalanceCard">Текущий баланс</p>
               <p class="metric" id="plan-current-balance">0 ₽</p>
-              <p class="hint">Фактический остаток в журнале</p>
+              <p class="hint" data-i18n="currentBalanceHint">Остаток счетов с учётом начального остатка</p>
             </article>
 
             <article class="card planner-card upcoming-box">
@@ -248,23 +275,40 @@
             </article>
           </div>
 
-          <!-- Рекомендации и советы по сокращению расходов -->
+          <article class="card portrait-card">
+            <div class="card-head">
+              <div>
+                <h2 class="with-help">
+                  <span data-i18n="spendPortraitTitle">Как уходят деньги по дням</span>
+                  <button class="help-mark" type="button" data-help="portraitHelp" data-i18n-aria="helpAria" aria-label="Что это значит">?</button>
+                </h2>
+                <p class="hint" data-i18n="spendPortraitHint">В какие дни недели больше тратите и что повторяется</p>
+              </div>
+            </div>
+            <div class="portrait-grid">
+              <div class="weekday-panel">
+                <p class="label" data-i18n="weekdayRhythm">Ритм недели</p>
+                <div class="weekday-chart" id="weekday-chart"></div>
+              </div>
+              <div class="split-panel" id="portrait-splits"></div>
+            </div>
+          </article>
+
           <article class="card tips-card">
             <div class="card-head">
               <div>
                 <h2 data-i18n="savingsTipsTitle">Где можно сократить расходы</h2>
-                <p class="hint" data-i18n="savingsTipsHint">Умные рекомендации на основе истории ваших трат</p>
+                <p class="hint" data-i18n="savingsTipsHint">Не советы «вообще», а рычаги именно этого периода</p>
               </div>
             </div>
             <div class="tips-list" id="planner-tips-list"></div>
           </article>
 
-          <!-- Самые частые траты (топ по повторяемости) -->
           <article class="card frequent-card">
             <div class="card-head">
               <div>
                 <h2 data-i18n="frequentExpensesTitle">Самые частые траты</h2>
-                <p class="hint" data-i18n="frequentExpensesHint">Где вы расплачиваетесь регулярнее всего (по числу операций)</p>
+                <p class="hint" data-i18n="frequentExpensesHint">Привычки, а не разовые крупные покупки</p>
               </div>
             </div>
             <ul class="frequent-list" id="frequent-expenses-list"></ul>
@@ -313,6 +357,8 @@
         </section>
       </main>
     </div>
+
+    <div class="help-float" id="help-float" hidden role="tooltip"></div>
 
     <div class="gate" id="gate">
       <div class="sheet-panel" role="dialog" aria-labelledby="gate-title">
@@ -402,6 +448,10 @@
             </label>
           </div>
           <label>
+            <span data-i18n="accountLabel">Счёт</span>
+            <select name="account" id="compose-account"></select>
+          </label>
+          <label>
             <span data-i18n="date">Дата</span>
             <input name="date" type="date" required />
           </label>
@@ -462,6 +512,10 @@
           <button class="icon-btn" id="close-import-sheet" type="button" data-i18n-aria="close" aria-label="Закрыть">×</button>
         </header>
         <p class="import-hint" data-i18n="importHint">Поддерживаются выписки Альфа-Банка (.xlsx) и СберБанка (.pdf). Переводы между своими счетами импортируются — они нужны для правильного сальдо.</p>
+        <label class="import-account-label">
+          <span data-i18n="importAccount">Зачислить на счёт</span>
+          <select id="import-account"></select>
+        </label>
         <p class="sync-status" id="import-status" hidden></p>
         <div class="import-toolbar">
           <button class="ghost" id="import-pick" type="button" data-i18n="importChoose">Выберите файл выписки (.xlsx, .pdf)</button>
