@@ -2,8 +2,12 @@ const state = {
   view: "overview",
   query: "",
   category: "all",
+  periodMode: "month",
   selectedMonth: thisMonth(),
-  activityMonthOnly: false,
+  periodFrom: "",
+  periodTo: "",
+  periodOpen: false,
+  activityMonthOnly: true,
   items: [],
   plannedItems: [],
   loading: true,
@@ -47,6 +51,70 @@ function isCurrentMonth(ym) {
   return ym === thisMonth();
 }
 
+function monthStart(ym) {
+  return `${ym}-01`;
+}
+
+function monthEnd(ym) {
+  const [year, month] = ym.split("-").map(Number);
+  const day = new Date(year, month, 0).getDate();
+  return `${ym}-${String(day).padStart(2, "0")}`;
+}
+
+function getPeriodBounds() {
+  if (state.periodMode === "3months") {
+    const anchor = state.selectedMonth || thisMonth();
+    const startYm = shiftMonth(anchor, -2);
+    return { from: monthStart(startYm), to: monthEnd(anchor) };
+  }
+  if (state.periodMode === "range") {
+    const from = state.periodFrom || monthStart(thisMonth());
+    let to = state.periodTo || isoLocal(new Date());
+    if (from > to) to = from;
+    return { from, to };
+  }
+  return { from: monthStart(state.selectedMonth), to: monthEnd(state.selectedMonth) };
+}
+
+function getPeriodLabel() {
+  if (state.periodMode === "month") {
+    return i18n.formatMonthYear(state.selectedMonth);
+  }
+  if (state.periodMode === "3months") {
+    const anchor = state.selectedMonth || thisMonth();
+    const startYm = shiftMonth(anchor, -2);
+    if (startYm === anchor) return i18n.formatMonthYear(anchor);
+    return i18n.t("periodThreeMonthsLabel", {
+      from: i18n.formatMonthYear(startYm),
+      to: i18n.formatMonthYear(anchor),
+    });
+  }
+  const bounds = getPeriodBounds();
+  return i18n.t("periodRangeLabel", {
+    from: i18n.formatShortDate(bounds.from),
+    to: i18n.formatShortDate(bounds.to),
+  });
+}
+
+function itemInPeriod(item) {
+  const { from, to } = getPeriodBounds();
+  return item.date >= from && item.date <= to;
+}
+
+function periodItems() {
+  return state.items.filter(itemInPeriod);
+}
+
+function listRecentMonths(count = 24) {
+  const months = [];
+  let ym = thisMonth();
+  for (let i = 0; i < count; i += 1) {
+    months.push(ym);
+    ym = shiftMonth(ym, -1);
+  }
+  return months;
+}
+
 const MONTH_PREFS_STORAGE = "folio-month-prefs-v1";
 
 function isValidMonth(ym) {
@@ -56,14 +124,31 @@ function isValidMonth(ym) {
 function loadMonthPrefs() {
   try {
     const raw = localStorage.getItem(MONTH_PREFS_STORAGE);
-    if (!raw) return { selectedMonth: thisMonth(), activityMonthOnly: false };
+    if (!raw) {
+      return {
+        periodMode: "month",
+        selectedMonth: thisMonth(),
+        periodFrom: "",
+        periodTo: "",
+        activityMonthOnly: true,
+      };
+    }
     const parsed = JSON.parse(raw);
     return {
+      periodMode: parsed.periodMode || "month",
       selectedMonth: isValidMonth(parsed.selectedMonth) ? parsed.selectedMonth : thisMonth(),
-      activityMonthOnly: parsed.activityMonthOnly === true,
+      periodFrom: parsed.periodFrom || "",
+      periodTo: parsed.periodTo || "",
+      activityMonthOnly: parsed.activityMonthOnly !== false,
     };
   } catch {
-    return { selectedMonth: thisMonth(), activityMonthOnly: false };
+    return {
+      periodMode: "month",
+      selectedMonth: thisMonth(),
+      periodFrom: "",
+      periodTo: "",
+      activityMonthOnly: true,
+    };
   }
 }
 
@@ -72,7 +157,10 @@ function persistMonthPrefs() {
     localStorage.setItem(
       MONTH_PREFS_STORAGE,
       JSON.stringify({
+        periodMode: state.periodMode,
         selectedMonth: state.selectedMonth,
+        periodFrom: state.periodFrom,
+        periodTo: state.periodTo,
         activityMonthOnly: state.activityMonthOnly,
       })
     );
@@ -89,11 +177,11 @@ function signed(item) {
 
 function totals() {
   const balance = state.items.reduce((sum, item) => sum + signed(item), 0);
-  const monthItems = state.items.filter((item) => monthKey(item.date) === state.selectedMonth);
-  const spendable = monthItems.filter((i) => i.category !== "transfers");
+  const scopedItems = periodItems();
+  const spendable = scopedItems.filter((i) => i.category !== "transfers");
   const income = spendable.filter((i) => i.kind === "income").reduce((s, i) => s + i.amount, 0);
   const spend = spendable.filter((i) => i.kind === "expense").reduce((s, i) => s + i.amount, 0);
-  return { balance, income, spend, monthItems };
+  return { balance, income, spend, monthItems: scopedItems };
 }
 
 function categorySpend() {
@@ -121,8 +209,10 @@ function isoLocal(d) {
 
 function lastSeven() {
   const days = [];
-  const [year, month] = state.selectedMonth.split("-").map(Number);
-  const anchor = isCurrentMonth(state.selectedMonth) ? new Date() : new Date(year, month, 0);
+  const bounds = getPeriodBounds();
+  const todayIso = isoLocal(new Date());
+  const anchorIso = bounds.to <= todayIso ? bounds.to : todayIso;
+  const anchor = new Date(`${anchorIso}T12:00:00`);
   for (let i = 6; i >= 0; i -= 1) {
     const d = new Date(anchor);
     d.setDate(d.getDate() - i);
@@ -146,25 +236,108 @@ function filteredItems() {
       const hay = `${item.merchant} ${item.note} ${categoryLabel}`.toLowerCase();
       const q = state.query.toLowerCase().trim();
       const catOk = state.category === "all" || item.category === state.category;
-      const monthOk = !state.activityMonthOnly || monthKey(item.date) === state.selectedMonth;
-      return catOk && monthOk && (!q || hay.includes(q));
+      const periodOk = !state.activityMonthOnly || itemInPeriod(item);
+      return catOk && periodOk && (!q || hay.includes(q));
     })
     .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
 }
 
-function renderMonthChrome() {
-  const monthText = i18n.formatMonthYear(state.selectedMonth);
+function renderPeriodChrome() {
+  syncPeriodPopover();
+  const periodText = getPeriodLabel();
   const subtitle = document.getElementById("brand-subtitle");
-  if (subtitle) subtitle.textContent = i18n.t("brandSubtitle", { month: monthText });
+  if (subtitle) subtitle.textContent = i18n.t("brandSubtitlePeriod", { period: periodText });
 
-  const label = document.getElementById("selected-month");
-  if (label) label.textContent = monthText;
+  const label = document.getElementById("period-label");
+  if (label) label.textContent = periodText;
 
   const monthOnly = document.getElementById("month-only");
   if (monthOnly) monthOnly.checked = state.activityMonthOnly;
 
-  const nowBtn = document.getElementById("month-now");
-  if (nowBtn) nowBtn.disabled = isCurrentMonth(state.selectedMonth);
+  document.querySelectorAll(".period-preset").forEach((btn) => {
+    const mode = btn.dataset.periodMode;
+    let isActive = false;
+    if (mode === "month" && btn.dataset.monthPreset === "current") {
+      isActive = state.periodMode === "month" && isCurrentMonth(state.selectedMonth);
+    } else if (mode === "3months") {
+      isActive = state.periodMode === "3months";
+    } else if (mode === "range") {
+      isActive = state.periodMode === "range";
+    }
+    btn.classList.toggle("is-active", isActive);
+  });
+
+  const rangePanel = document.getElementById("period-range-panel");
+  if (rangePanel) rangePanel.hidden = state.periodMode !== "range" || !state.periodOpen;
+
+  const fromInput = document.getElementById("period-from");
+  const toInput = document.getElementById("period-to");
+  const bounds = getPeriodBounds();
+  if (fromInput && !fromInput.matches(":focus")) fromInput.value = state.periodFrom || bounds.from;
+  if (toInput && !toInput.matches(":focus")) toInput.value = state.periodTo || bounds.to;
+
+  renderPeriodMonthGrid();
+}
+
+function renderPeriodMonthGrid() {
+  const grid = document.getElementById("period-month-grid");
+  if (!grid) return;
+
+  const months = listRecentMonths(24);
+  const txMonths = new Set(state.items.map((item) => monthKey(item.date)));
+
+  grid.replaceChildren();
+  months.forEach((ym) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "period-month-btn";
+    btn.dataset.month = ym;
+    const isSelected = state.periodMode === "month" && state.selectedMonth === ym;
+    if (isSelected) btn.classList.add("is-active");
+    if (txMonths.has(ym)) btn.classList.add("has-data");
+    if (isCurrentMonth(ym)) btn.classList.add("is-current");
+
+    const [year, month] = ym.split("-").map(Number);
+    const monthName = new Date(year, month - 1, 1).toLocaleDateString("ru-RU", { month: "long" });
+    btn.innerHTML = `
+      <span class="period-month-name">${monthName.charAt(0).toUpperCase()}${monthName.slice(1)}</span>
+      <span class="period-month-year">${year}</span>
+    `;
+    grid.appendChild(btn);
+  });
+}
+
+function syncPeriodPopover() {
+  const popover = document.getElementById("period-popover");
+  const backdrop = document.getElementById("period-backdrop");
+  const trigger = document.getElementById("period-trigger");
+  if (popover) popover.hidden = !state.periodOpen;
+  if (backdrop) backdrop.hidden = !state.periodOpen;
+  if (trigger) trigger.setAttribute("aria-expanded", String(state.periodOpen));
+}
+
+function togglePeriodPopover(open) {
+  state.periodOpen = typeof open === "boolean" ? open : !state.periodOpen;
+  syncPeriodPopover();
+  if (state.periodOpen) renderPeriodChrome();
+}
+
+function applyPeriodMode(mode, options = {}) {
+  state.periodMode = mode;
+  if (mode === "month") {
+    if (options.month) state.selectedMonth = options.month;
+    else if (options.currentMonth) state.selectedMonth = thisMonth();
+  }
+  if (mode === "3months") {
+    state.selectedMonth = options.month || thisMonth();
+  }
+  if (mode === "range") {
+    const bounds = getPeriodBounds();
+    state.periodFrom = options.from || state.periodFrom || bounds.from;
+    state.periodTo = options.to || state.periodTo || bounds.to;
+  }
+  persistMonthPrefs();
+  render();
 }
 
 const PLANNED_STORAGE_KEY = "folio_planned_list";
@@ -190,11 +363,11 @@ state.plannedItems = loadPlannedItems();
 
 function computePlannerMetrics() {
   const { balance } = totals();
-  const currentMonth = state.selectedMonth;
 
   const relevantPlanned = state.plannedItems.filter((p) => {
     if (!p.date) return true;
-    return monthKey(p.date) === currentMonth;
+    const { from, to } = getPeriodBounds();
+    return p.date >= from && p.date <= to;
   });
 
   const upcomingExpenses = relevantPlanned
@@ -557,23 +730,22 @@ function renderChips() {
   });
 }
 
-function computeSpendingInsights(monthItems) {
-  const expenses = monthItems.filter((i) => i.kind === "expense" && i.category !== "transfers");
+function computeSpendingInsights(scopedItems) {
+  const expenses = scopedItems.filter((i) => i.kind === "expense" && i.category !== "transfers");
   const totalSpend = expenses.reduce((sum, i) => sum + i.amount, 0);
 
   if (!expenses.length || totalSpend <= 0) {
     return null;
   }
 
-  // 1. Дни месяца и темп сгорания (burn rate)
-  const [year, month] = state.selectedMonth.split("-").map(Number);
-  const daysInMonth = new Date(year, month, 0).getDate();
-  let elapsedDays = daysInMonth;
-  if (isCurrentMonth(state.selectedMonth)) {
-    const today = new Date();
-    elapsedDays = Math.min(daysInMonth, Math.max(1, today.getDate()));
-  }
-  const burnPerDay = totalSpend / Math.max(1, elapsedDays);
+  const bounds = getPeriodBounds();
+  const fromDate = new Date(`${bounds.from}T12:00:00`);
+  const toDate = new Date(`${bounds.to}T12:00:00`);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const effectiveEnd = toDate > today ? today : toDate;
+  const elapsedDays = Math.max(1, Math.floor((effectiveEnd - fromDate) / 86400000) + 1);
+  const burnPerDay = totalSpend / elapsedDays;
 
   // 2. Топ пожирателей по торговым точкам/местам
   const merchantMap = {};
@@ -633,19 +805,19 @@ function computeSpendingInsights(monthItems) {
   };
 }
 
-function renderAnalytics(monthItems) {
+function renderAnalytics(scopedItems) {
   const container = document.getElementById("insights-grid");
   const subtitle = document.getElementById("analytics-subtitle");
   if (!container) return;
 
-  const monthText = i18n.formatMonthYear(state.selectedMonth);
+  const periodText = getPeriodLabel();
   if (subtitle) {
-    subtitle.textContent = i18n.t("analyticsSubtitle", { month: monthText });
+    subtitle.textContent = i18n.t("analyticsSubtitlePeriod", { period: periodText });
   }
 
-  const data = computeSpendingInsights(monthItems);
+  const data = computeSpendingInsights(scopedItems);
   if (!data) {
-    container.innerHTML = `<p class="empty">${i18n.t("insightsNoData")}</p>`;
+    container.innerHTML = `<p class="empty">${i18n.t("insightsNoDataPeriod")}</p>`;
     return;
   }
 
@@ -869,7 +1041,7 @@ function renderPlanner(monthItems) {
 function render() {
   renderGate();
   renderSyncStatus();
-  renderMonthChrome();
+  renderPeriodChrome();
   renderPasswordSheet();
   renderImportSheet();
   const { balance, income, spend, monthItems } = totals();
@@ -879,8 +1051,8 @@ function render() {
 
   const cats = categorySpend();
   document.getElementById("chart-hint").textContent = cats.length
-    ? i18n.t("chartCategories", { count: cats.length })
-    : i18n.t("chartNoSpend");
+    ? i18n.t("chartCategoriesPeriod", { count: cats.length })
+    : i18n.t("chartNoSpendPeriod");
   renderDonut(cats);
   renderLegend(cats);
   renderBars();
@@ -1205,22 +1377,68 @@ document.querySelectorAll("[data-goto]").forEach((btn) => {
   btn.addEventListener("click", () => setView(btn.dataset.goto));
 });
 
-document.getElementById("month-prev").addEventListener("click", () => {
-  state.selectedMonth = shiftMonth(state.selectedMonth, -1);
-  persistMonthPrefs();
-  render();
+document.getElementById("period-trigger")?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  togglePeriodPopover();
 });
 
-document.getElementById("month-next").addEventListener("click", () => {
-  state.selectedMonth = shiftMonth(state.selectedMonth, 1);
-  persistMonthPrefs();
-  render();
+document.getElementById("period-close")?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  togglePeriodPopover(false);
 });
 
-document.getElementById("month-now").addEventListener("click", () => {
-  state.selectedMonth = thisMonth();
-  persistMonthPrefs();
-  render();
+document.getElementById("period-backdrop")?.addEventListener("click", () => {
+  togglePeriodPopover(false);
+});
+
+document.getElementById("period-popover")?.addEventListener("click", (event) => {
+  event.stopPropagation();
+});
+
+document.querySelectorAll(".period-preset").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const mode = btn.dataset.periodMode;
+    if (mode === "month" && btn.dataset.monthPreset === "current") {
+      applyPeriodMode("month", { currentMonth: true });
+      togglePeriodPopover(false);
+      return;
+    }
+    if (mode === "3months") {
+      applyPeriodMode("3months", { month: thisMonth() });
+      togglePeriodPopover(false);
+      return;
+    }
+    if (mode === "range") {
+      state.periodMode = "range";
+      const bounds = getPeriodBounds();
+      state.periodFrom = state.periodFrom || monthStart(thisMonth());
+      state.periodTo = state.periodTo || bounds.to;
+      persistMonthPrefs();
+      togglePeriodPopover(true);
+      renderPeriodChrome();
+    }
+  });
+});
+
+document.getElementById("period-month-grid")?.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-month]");
+  if (!btn) return;
+  applyPeriodMode("month", { month: btn.dataset.month });
+  togglePeriodPopover(false);
+});
+
+document.getElementById("period-range-apply")?.addEventListener("click", () => {
+  const from = document.getElementById("period-from")?.value;
+  const to = document.getElementById("period-to")?.value;
+  if (!from || !to) return;
+  applyPeriodMode("range", { from, to: to >= from ? to : from });
+  togglePeriodPopover(false);
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.periodOpen) {
+    togglePeriodPopover(false);
+  }
 });
 
 document.getElementById("legend").addEventListener("click", (event) => {
@@ -1551,6 +1769,7 @@ document.getElementById("import-confirm")?.addEventListener("click", async () =>
     state.syncError = null;
     const newestMonth = selected.reduce((max, item) => (item.date.slice(0, 7) > max ? item.date.slice(0, 7) : max), selected[0].date.slice(0, 7));
     if (newestMonth) {
+      state.periodMode = "month";
       state.selectedMonth = newestMonth;
       persistMonthPrefs();
     }

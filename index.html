@@ -35,13 +35,48 @@
         </div>
 
         <div class="topbar-center">
-          <div class="month-switch" role="group" data-i18n-aria="monthSwitchLabel" aria-label="Выбор месяца">
-            <button class="ghost month-nav" id="month-prev" type="button" data-i18n-aria="previousMonth" aria-label="Предыдущий месяц">‹</button>
-            <strong id="selected-month">Сентябрь 2026</strong>
-            <button class="ghost month-nav" id="month-next" type="button" data-i18n-aria="nextMonth" aria-label="Следующий месяц">›</button>
+          <div class="period-picker" id="period-picker">
+            <button class="period-trigger" id="period-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="monthSwitchLabel" aria-label="Выбор периода">
+              <span class="period-icon" aria-hidden="true"></span>
+              <span id="period-label">Сентябрь 2026</span>
+              <span class="period-chevron" aria-hidden="true">▾</span>
+            </button>
+
+            <div class="period-popover" id="period-popover" hidden role="dialog" aria-labelledby="period-popover-title">
+              <div class="period-popover-head">
+                <h2 id="period-popover-title" data-i18n="periodPickerTitle">Период</h2>
+                <button class="icon-btn period-close" id="period-close" type="button" data-i18n-aria="close" aria-label="Закрыть">×</button>
+              </div>
+
+              <div class="period-presets" role="group" aria-label="Быстрый выбор">
+                <button class="period-preset" type="button" data-period-mode="month" data-month-preset="current" data-i18n="periodCurrentMonth">Текущий месяц</button>
+                <button class="period-preset" type="button" data-period-mode="3months" data-i18n="periodThreeMonths">3 месяца</button>
+                <button class="period-preset" type="button" data-period-mode="range" data-i18n="periodCustom">Свой период</button>
+              </div>
+
+              <div class="period-range-panel" id="period-range-panel" hidden>
+                <div class="period-range-row">
+                  <label>
+                    <span data-i18n="periodFrom">С</span>
+                    <input id="period-from" type="date" />
+                  </label>
+                  <label>
+                    <span data-i18n="periodTo">По</span>
+                    <input id="period-to" type="date" />
+                  </label>
+                </div>
+                <button class="primary wide" id="period-range-apply" type="button" data-i18n="periodApply">Применить</button>
+              </div>
+
+              <div class="period-months-panel">
+                <p class="period-section-label" data-i18n="periodSelectMonth">Или выберите месяц</p>
+                <div class="period-month-grid" id="period-month-grid"></div>
+              </div>
+            </div>
           </div>
-          <button class="text-btn month-now" id="month-now" type="button" data-i18n="currentMonth" data-i18n-aria="goToCurrentMonth" aria-label="Текущий месяц">Текущий месяц</button>
         </div>
+
+        <div class="period-backdrop" id="period-backdrop" hidden></div>
 
         <div class="topbar-right">
           <nav class="topbar-nav" aria-label="Навигация">
@@ -119,12 +154,12 @@
               <div class="split">
                 <div>
                   <span class="dot income"></span>
-                  <p class="label" data-i18n="inThisMonth">Поступило в месяце</p>
+                  <p class="label" data-i18n="inThisPeriod">Поступило за период</p>
                   <p class="metric" id="income-figure">0 ₽</p>
                 </div>
                 <div>
                   <span class="dot spend"></span>
-                  <p class="label" data-i18n="outThisMonth">Списано в месяце</p>
+                  <p class="label" data-i18n="outThisPeriod">Списано за период</p>
                   <p class="metric" id="spend-figure">0 ₽</p>
                 </div>
               </div>
@@ -264,9 +299,9 @@
               <span class="sr-only" data-i18n="searchLabel">Поиск по месту или заметке</span>
               <input id="search" type="search" data-i18n-placeholder="searchPlaceholder" placeholder="Поиск по месту или заметке" />
             </label>
-            <label class="month-filter">
-              <input id="month-only" type="checkbox" />
-              <span data-i18n="onlySelectedMonth">Только этот месяц</span>
+            <label class="month-filter" hidden>
+              <input id="month-only" type="checkbox" checked />
+              <span data-i18n="onlySelectedPeriod">Только выбранный период</span>
             </label>
             <div class="chips" id="chips"></div>
           </div>
