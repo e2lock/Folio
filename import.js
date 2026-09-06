@@ -246,8 +246,8 @@ function parseSberRows(rows) {
 
     const kind = signedAmount < 0 ? "expense" : "income";
     const amount = Math.abs(signedAmount);
-    const merchant = extractSberMerchant(description, bankCategory, false);
-    const category = categorizeSber(description, bankCategory, kind);
+    const merchant = extractSberMerchant(description, bankCategory, false, amount);
+    const category = categorizeSber(description, bankCategory, kind, amount);
     const note = buildSberNote(bankCategory, description, code, false);
 
     items.push({
@@ -432,7 +432,7 @@ function isSberInternalTransfer(desc, categoryRaw, ownerName, ownerInitials) {
   return false;
 }
 
-function extractSberMerchant(desc, categoryRaw, isInternal) {
+function extractSberMerchant(desc, categoryRaw, isInternal, amount) {
   if (isInternal) {
     return "Перевод между своими счетами";
   }
@@ -444,6 +444,13 @@ function extractSberMerchant(desc, categoryRaw, isInternal) {
     .replace(/^SBSCR_/i, "")
     .trim();
 
+  if (/MAPP_SBERBANK_ONL/i.test(s)) {
+    const amt = Number(amount) || 0;
+    if (amt > 0 && amt < 700) return "Билайн";
+    if (amt >= 2000) return "Коммуналка";
+    return "Сервисы";
+  }
+
   if (/YANDEX\*4121\*GO/i.test(s)) return "Yandex Go";
   if (/YANDEX\*5411\*LAVKA/i.test(s)) return "Яндекс Лавка";
   if (/YANDEX\*5411\*EDARIT/i.test(s)) return "Яндекс Еда";
@@ -451,7 +458,6 @@ function extractSberMerchant(desc, categoryRaw, isInternal) {
   if (/YANDEX\*7999\*SCOOTERS/i.test(s)) return "Яндекс Самокаты";
   if (/SBER\*5411\*SAMOKAT/i.test(s)) return "Самокат";
   if (/WHOOSH/i.test(s)) return "Whoosh";
-  if (/MAPP_SBERBANK_ONL/i.test(s)) return "СберБанк Онлайн";
   if (/ROSTELECOM/i.test(s)) return "Ростелеком";
   if (/Russian Railways/i.test(s)) return "РЖД";
   if (/ATM\s*(\d+)/i.test(s)) return `Банкомат №${s.match(/ATM\s*(\d+)/i)[1]}`;
@@ -471,10 +477,17 @@ function extractSberMerchant(desc, categoryRaw, isInternal) {
   return cellText(categoryRaw).slice(0, 48) || "Операция";
 }
 
-function categorizeSber(desc, categoryRaw, kind) {
+function categorizeSber(desc, categoryRaw, kind, amount) {
   const d = cellText(desc).toLowerCase();
   const c = cellText(categoryRaw).toLowerCase();
   const hay = `${d} ${c}`;
+  const amt = Number(amount) || 0;
+
+  if (/mapp_sberbank/i.test(d)) {
+    if (amt > 0 && amt < 700) return "communications";
+    if (amt >= 2000) return "utilities";
+    return "services";
+  }
 
   if (/выдача наличных|снятие наличных|внесение наличных|банкомат|atm\b/i.test(hay)) {
     return "cash";
@@ -649,8 +662,8 @@ function parseSberPdfLines(lines) {
     fullDesc = fullDesc.trim();
 
     const isInternal = isSberInternalTransfer(fullDesc, headerInfo.categoryRaw, ownerName, ownerInitials);
-    const merchant = extractSberMerchant(fullDesc, headerInfo.categoryRaw, isInternal);
-    const category = isInternal ? "transfers" : categorizeSber(fullDesc, headerInfo.categoryRaw, headerInfo.kind);
+    const merchant = extractSberMerchant(fullDesc, headerInfo.categoryRaw, isInternal, headerInfo.amount);
+    const category = isInternal ? "transfers" : categorizeSber(fullDesc, headerInfo.categoryRaw, headerInfo.kind, headerInfo.amount);
     const note = buildSberNote(headerInfo.categoryRaw, fullDesc, authCode, isInternal);
 
     items.push({
