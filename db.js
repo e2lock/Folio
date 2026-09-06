@@ -167,9 +167,28 @@ const db = {
     if (error) throw error;
   },
 
+  async insertItems(items) {
+    if (!this.ready) throw new Error("not_ready");
+    if (!items.length) return;
+    const rows = items.map(toRow);
+    const chunkSize = 100;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+      const { error } = await this.client.from("transactions").insert(rows.slice(i, i + chunkSize));
+      if (error) throw error;
+    }
+  },
+
   async deleteItem(id) {
     if (!this.ready) throw new Error("not_ready");
     const { error } = await this.client.from("transactions").delete().eq("id", id);
+    if (error) throw error;
+  },
+
+  async deleteAllItems(householdId) {
+    if (!this.ready) throw new Error("not_ready");
+    let query = this.client.from("transactions").delete();
+    if (householdId) query = query.eq("household_id", householdId);
+    const { error } = await query;
     if (error) throw error;
   },
 };

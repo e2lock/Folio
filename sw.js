@@ -1,4 +1,4 @@
-const CACHE = "folio-static-v8";
+const CACHE = "folio-static-v9";
 const ASSETS = [
   "./",
   "index.html",
@@ -6,6 +6,7 @@ const ASSETS = [
   "app.js",
   "i18n.js",
   "db.js",
+  "import.js",
   "config.js",
   "pwa.js",
   "manifest.webmanifest",

@@ -14,18 +14,18 @@ try {
     Where-Object { $_.CommandLine -match 'serve\.ps1' -and $_.ProcessId -ne $PID } |
     Select-Object -ExpandProperty ProcessId -First 1
 
-  Write-Host "Порт $Port уже занят — второй экземпляр serve.ps1 не нужен."
-  Write-Host "Откройте: $prefix"
+  Write-Host "Port $Port is already in use."
+  Write-Host "Open: $prefix"
   if ($existing) {
-    Write-Host "Уже запущен процесс serve.ps1 (PID $existing). Остановка: Stop-Process -Id $existing -Force"
+    Write-Host "serve.ps1 already running (PID $existing). Stop: Stop-Process -Id $existing -Force"
   } else {
-    Write-Host "Перезапуск: найдите процесс на порту $Port и остановите его, затем снова запустите serve.ps1."
+    Write-Host "Free port $Port, then run serve.ps1 again."
   }
   exit 1
 }
 
-Write-Host "Folio запущен: $prefix"
-Write-Host "Нажмите Ctrl+C для остановки."
+Write-Host "Folio: $prefix"
+Write-Host "Press Ctrl+C to stop."
 
 $types = @{
   ".html" = "text/html; charset=utf-8"

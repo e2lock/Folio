@@ -14,6 +14,9 @@ const state = {
   authMode: "signin",
   authError: null,
   passwordError: null,
+  importPreview: null,
+  importError: null,
+  importBusy: false,
 };
 
 function normalizeItem(item) {
@@ -84,15 +87,16 @@ function signed(item) {
 function totals() {
   const balance = state.items.reduce((sum, item) => sum + signed(item), 0);
   const monthItems = state.items.filter((item) => monthKey(item.date) === state.selectedMonth);
-  const income = monthItems.filter((i) => i.kind === "income").reduce((s, i) => s + i.amount, 0);
-  const spend = monthItems.filter((i) => i.kind === "expense").reduce((s, i) => s + i.amount, 0);
+  const spendable = monthItems.filter((i) => i.category !== "transfers");
+  const income = spendable.filter((i) => i.kind === "income").reduce((s, i) => s + i.amount, 0);
+  const spend = spendable.filter((i) => i.kind === "expense").reduce((s, i) => s + i.amount, 0);
   return { balance, income, spend, monthItems };
 }
 
 function categorySpend() {
   const map = {};
   totals().monthItems
-    .filter((item) => item.kind === "expense")
+    .filter((item) => item.kind === "expense" && item.category !== "transfers")
     .forEach((item) => {
       map[item.category] = (map[item.category] || 0) + item.amount;
     });
@@ -121,7 +125,7 @@ function lastSeven() {
     d.setDate(d.getDate() - i);
     const iso = isoLocal(d);
     const spend = state.items
-      .filter((item) => item.date === iso && item.kind === "expense")
+      .filter((item) => item.date === iso && item.kind === "expense" && item.category !== "transfers")
       .reduce((s, item) => s + item.amount, 0);
     days.push({
       iso,
@@ -255,6 +259,8 @@ function renderGate() {
   }
   if (signOut) signOut.hidden = !state.session;
   if (changePassword) changePassword.hidden = !state.session;
+  const deleteAllTest = document.getElementById("delete-all-test");
+  if (deleteAllTest) deleteAllTest.hidden = !state.session || !state.household;
   renderJournalSwitch();
 }
 
@@ -403,6 +409,7 @@ function render() {
   renderSyncStatus();
   renderMonthChrome();
   renderPasswordSheet();
+  renderImportSheet();
   const { balance, income, spend } = totals();
   document.getElementById("balance-figure").textContent = i18n.formatMoney(balance);
   document.getElementById("income-figure").textContent = i18n.formatMoney(income);
@@ -432,6 +439,144 @@ function closeSheet() {
   document.getElementById("sheet").hidden = true;
 }
 
+function openImportSheet() {
+  const sheet = document.getElementById("import-sheet");
+  if (!sheet) return;
+  state.importError = null;
+  sheet.hidden = false;
+  renderImportSheet();
+}
+
+function   closeImportSheet() {
+  const sheet = document.getElementById("import-sheet");
+  if (sheet) sheet.hidden = true;
+  state.importError = null;
+  state.importBusy = false;
+}
+
+function renderImportSheet() {
+  const sheet = document.getElementById("import-sheet");
+  const status = document.getElementById("import-status");
+  const summary = document.getElementById("import-summary");
+  const wrap = document.getElementById("import-preview-wrap");
+  const body = document.getElementById("import-preview-body");
+  const confirmBtn = document.getElementById("import-confirm");
+  const selectAllBtn = document.getElementById("import-select-all");
+  const clearAllBtn = document.getElementById("import-clear-all");
+  if (!sheet || sheet.hidden) return;
+
+  const busy = state.importBusy;
+  const preview = state.importPreview;
+
+  if (status) {
+    status.hidden = !state.importError && !busy;
+    status.classList.toggle("is-error", Boolean(state.importError));
+    if (state.importError) status.textContent = state.importError;
+    else if (busy) status.textContent = i18n.t(preview ? "importSaving" : "importParsing");
+  }
+
+  document.getElementById("import-pick")?.toggleAttribute("disabled", busy);
+  confirmBtn?.toggleAttribute("disabled", busy || !preview?.stats.selected);
+  selectAllBtn?.toggleAttribute("disabled", busy || !preview);
+  clearAllBtn?.toggleAttribute("disabled", busy || !preview);
+
+  if (summary) {
+    if (!preview) {
+      summary.hidden = true;
+      summary.textContent = "";
+    } else if (!preview.stats.selected) {
+      summary.hidden = false;
+      summary.textContent = i18n.t("importSummaryEmpty");
+    } else {
+      summary.hidden = false;
+      const from = preview.stats.dateFrom ? i18n.formatShortDate(preview.stats.dateFrom) : "—";
+      const to = preview.stats.dateTo ? i18n.formatShortDate(preview.stats.dateTo) : "—";
+      const parts = [
+        i18n.t("importSummary", {
+          selected: preview.stats.selected,
+          total: preview.stats.total,
+          from,
+          to,
+        }),
+      ];
+      if (preview.stats.duplicates) {
+        parts.push(i18n.t("importDuplicates", { count: preview.stats.duplicates }));
+      }
+      summary.textContent = parts.join(" · ");
+    }
+  }
+
+  selectAllBtn.hidden = !preview;
+  clearAllBtn.hidden = !preview;
+  confirmBtn.hidden = !preview;
+  wrap.hidden = !preview;
+
+  if (!body || !preview) {
+    if (body) body.replaceChildren();
+    return;
+  }
+
+  body.replaceChildren();
+  folioImport.groupRowsByMonth(preview.rows).forEach(([monthKeyValue, rows]) => {
+    const monthRow = document.createElement("tr");
+    monthRow.className = "import-month-row";
+    const monthCell = document.createElement("td");
+    monthCell.colSpan = 5;
+    monthCell.textContent = i18n.formatMonthYear(monthKeyValue);
+    monthRow.appendChild(monthCell);
+    body.appendChild(monthRow);
+
+    rows.forEach((row) => {
+      const tr = document.createElement("tr");
+      tr.classList.toggle("is-dup", row.duplicate);
+      tr.classList.toggle("is-skip", !row.selected && !row.duplicate);
+
+      const checkCell = document.createElement("td");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = row.selected;
+      checkbox.disabled = busy || row.duplicate;
+      checkbox.addEventListener("change", () => {
+        row.selected = checkbox.checked;
+        preview.stats = folioImport.statsForRows(preview.rows);
+        renderImportSheet();
+      });
+      checkCell.appendChild(checkbox);
+      tr.appendChild(checkCell);
+
+      const dateCell = document.createElement("td");
+      dateCell.textContent = i18n.formatShortDate(row.item.date);
+      tr.appendChild(dateCell);
+
+      const merchantCell = document.createElement("td");
+      merchantCell.textContent = row.item.merchant;
+      if (row.duplicate) {
+        const flag = document.createElement("span");
+        flag.className = "import-flag";
+        flag.textContent = i18n.t("importDuplicate");
+        merchantCell.appendChild(flag);
+      } else if (row.skipReason) {
+        const flag = document.createElement("span");
+        flag.className = "import-flag";
+        flag.textContent = i18n.t(row.skipReason);
+        merchantCell.appendChild(flag);
+      }
+      tr.appendChild(merchantCell);
+
+      const amountCell = document.createElement("td");
+      amountCell.className = row.item.kind === "income" ? "amount-income" : "amount-expense";
+      amountCell.textContent = formatSignedAmount(row.item);
+      tr.appendChild(amountCell);
+
+      const categoryCell = document.createElement("td");
+      categoryCell.textContent = i18n.categoryLabel(row.item.category);
+      tr.appendChild(categoryCell);
+
+      body.appendChild(tr);
+    });
+  });
+}
+
 function openPasswordSheet() {
   const sheet = document.getElementById("password-sheet");
   const form = document.getElementById("password-form");
@@ -451,6 +596,8 @@ function closePasswordSheet() {
 function setBusy(busy) {
   state.loading = busy;
   document.getElementById("open-compose")?.toggleAttribute("disabled", busy || !state.household);
+  document.getElementById("open-import")?.toggleAttribute("disabled", busy || !state.household);
+  document.getElementById("delete-all-test")?.toggleAttribute("disabled", busy || !state.household);
   renderSyncStatus();
 }
 
@@ -738,5 +885,117 @@ async function handleSignOut() {
 
 document.getElementById("sign-out")?.addEventListener("click", handleSignOut);
 document.getElementById("gate-sign-out")?.addEventListener("click", handleSignOut);
+
+async function handleImportFile(file) {
+  if (!file || state.loading || !state.household) return;
+  state.importBusy = true;
+  state.importError = null;
+  renderImportSheet();
+  try {
+    state.importPreview = await folioImport.parseFile(file, state.items);
+  } catch (error) {
+    console.error(error);
+    state.importPreview = null;
+    const key = String(error.message || "");
+    state.importError = i18n.t(key.startsWith("import") ? key : "importFailed");
+  }
+  state.importBusy = false;
+  renderImportSheet();
+}
+
+document.getElementById("open-import")?.addEventListener("click", () => {
+  state.importPreview = null;
+  state.importError = null;
+  openImportSheet();
+});
+
+document.getElementById("close-import-sheet")?.addEventListener("click", closeImportSheet);
+document.getElementById("import-sheet")?.addEventListener("click", (event) => {
+  if (event.target.id === "import-sheet") closeImportSheet();
+});
+
+document.getElementById("import-pick")?.addEventListener("click", () => {
+  document.getElementById("import-file")?.click();
+});
+
+document.getElementById("import-file")?.addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  await handleImportFile(file);
+});
+
+document.getElementById("import-select-all")?.addEventListener("click", () => {
+  if (!state.importPreview) return;
+  state.importPreview.rows.forEach((row) => {
+    if (!row.duplicate) row.selected = true;
+  });
+  state.importPreview.stats = folioImport.statsForRows(state.importPreview.rows);
+  renderImportSheet();
+});
+
+document.getElementById("import-clear-all")?.addEventListener("click", () => {
+  if (!state.importPreview) return;
+  state.importPreview.rows.forEach((row) => {
+    row.selected = false;
+  });
+  state.importPreview.stats = folioImport.statsForRows(state.importPreview.rows);
+  renderImportSheet();
+});
+
+document.getElementById("import-confirm")?.addEventListener("click", async () => {
+  if (!state.importPreview || state.importBusy || !state.household) return;
+  const selected = state.importPreview.rows.filter((row) => row.selected).map((row) => normalizeItem(row.item));
+  if (!selected.length) return;
+
+  state.importBusy = true;
+  state.importError = null;
+  renderImportSheet();
+
+  const prev = state.items.slice();
+  state.items = [...selected, ...state.items].sort(
+    (a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)
+  );
+
+  try {
+    await db.insertItems(selected);
+    state.syncError = null;
+    const newestMonth = selected.reduce((max, item) => (item.date.slice(0, 7) > max ? item.date.slice(0, 7) : max), selected[0].date.slice(0, 7));
+    if (newestMonth) {
+      state.selectedMonth = newestMonth;
+      persistMonthPrefs();
+    }
+    state.importPreview = null;
+    closeImportSheet();
+    setView("activity");
+    render();
+  } catch (error) {
+    console.error(error);
+    state.items = prev;
+    state.importError = i18n.t("importFailed");
+    state.importBusy = false;
+    renderImportSheet();
+    render();
+  }
+});
+
+document.getElementById("delete-all-test")?.addEventListener("click", async () => {
+  if (state.loading || !state.household) return;
+  const journal = state.household.name || i18n.t("journalLabel");
+  if (!window.confirm(i18n.t("deleteAllConfirm", { journal }))) return;
+  setBusy(true);
+  const prev = state.items.slice();
+  state.items = [];
+  render();
+  try {
+    await db.deleteAllItems(state.household.id);
+    state.syncError = null;
+  } catch (error) {
+    console.error(error);
+    state.items = prev;
+    state.syncError = i18n.t("deleteAllFailed");
+  }
+  setBusy(false);
+  render();
+});
 
 boot();

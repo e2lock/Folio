@@ -24,7 +24,7 @@
       <aside class="rail">
         <div class="brand">
           <span class="mark" aria-hidden="true"></span>
-          <div>
+          <div class="brand-copy">
             <strong>Folio</strong>
             <p id="brand-subtitle">Журнал за сентябрь</p>
           </div>
@@ -66,8 +66,9 @@
 
           <div class="hero-grid">
             <article class="card balance-card">
-              <p class="label" data-i18n="availableBalance">Доступный баланс</p>
+              <p class="label" data-i18n="availableBalance">Сальдо журнала</p>
               <p class="balance" id="balance-figure">0 ₽</p>
+              <p class="balance-hint" data-i18n="balanceHint">Доходы минус расходы по всем записям. Не остаток на счёте и не учитывает долг по кредитке.</p>
               <div class="split">
                 <div>
                   <span class="dot income"></span>
@@ -123,8 +124,13 @@
               <p class="eyebrow" data-i18n="ledgerEyebrow">Журнал</p>
               <h1 data-i18n="activityTitle">Операции</h1>
             </div>
-            <button class="primary" id="open-compose" type="button" data-i18n="addEntry">Добавить запись</button>
+            <div class="page-head-actions">
+              <button class="ghost danger-btn" id="delete-all-test" type="button" hidden data-i18n="deleteAllTest">Тест: удалить все</button>
+              <button class="ghost" id="open-import" type="button" data-i18n="importStatement">Импорт выписки</button>
+              <button class="primary" id="open-compose" type="button" data-i18n="addEntry">Добавить запись</button>
+            </div>
           </header>
+          <input id="import-file" type="file" accept=".xlsx,.xls,.csv" hidden />
 
           <div class="toolbar">
             <label class="search">
@@ -236,10 +242,44 @@
       </div>
     </div>
 
+    <div class="sheet" id="import-sheet" hidden>
+      <div class="sheet-panel sheet-panel-wide" role="dialog" aria-labelledby="import-sheet-title">
+        <header class="sheet-head">
+          <h2 id="import-sheet-title" data-i18n="importTitle">Импорт выписки</h2>
+          <button class="icon-btn" id="close-import-sheet" type="button" data-i18n-aria="close" aria-label="Закрыть">×</button>
+        </header>
+        <p class="import-hint" data-i18n="importHint">Поддерживается выписка Альфа-Банка. Внутренние переводы между своими счетами по умолчанию не импортируются.</p>
+        <p class="sync-status" id="import-status" hidden></p>
+        <div class="import-toolbar">
+          <button class="ghost" id="import-pick" type="button" data-i18n="importChoose">Выберите файл Excel (.xlsx) из банка</button>
+          <button class="text-btn" id="import-select-all" type="button" hidden data-i18n="importSelectAll">Выбрать все новые</button>
+          <button class="text-btn" id="import-clear-all" type="button" hidden data-i18n="importClearAll">Снять выбор</button>
+        </div>
+        <p class="import-summary" id="import-summary" hidden></p>
+        <div class="import-preview-wrap" id="import-preview-wrap" hidden>
+          <table class="import-preview" id="import-preview">
+            <thead>
+              <tr>
+                <th scope="col"></th>
+                <th scope="col" data-i18n="date">Дата</th>
+                <th scope="col" data-i18n="merchant">Место</th>
+                <th scope="col" data-i18n="amount">Сумма</th>
+                <th scope="col" data-i18n="category">Категория</th>
+              </tr>
+            </thead>
+            <tbody id="import-preview-body"></tbody>
+          </table>
+        </div>
+        <button class="primary wide" id="import-confirm" type="button" hidden data-i18n="importConfirm">Импортировать выбранные</button>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
     <script src="i18n.js"></script>
     <script src="db.js"></script>
+    <script src="import.js"></script>
     <script src="app.js"></script>
     <script src="pwa.js"></script>
   </body>
